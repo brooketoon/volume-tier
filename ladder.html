@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Measuring Volume: Missions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<!--
+  Tier layer for the Measuring Volume bench sandbox.
+  This page does NOT modify index.html. It loads index.html in a same-origin
+  frame, reads the water levels from its drawing, and adds overlays at runtime.
+  Keep this file in the same folder as index.html.
+-->
+<style>
+:root{
+  --page:#EEF2F4; --wall:#DDE6EB; --panel:#FFFFFF;
+  --ink:#1B2730; --muted:#52636E; --line:#C3CFD6;
+  --bench:#2E3A35;
+  --glass-fill:rgba(255,255,255,.55); --glass-stroke:#6F8796;
+  --water:#2A74B5; --water-edge:#174A78; --tick:#1F2C35;
+  --safety:#D99A00; --focus:#D99A00;
+  --good:#1D7349; --warn:#8C5300; --bad:#A8261E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#12181C; --wall:#1A2329; --panel:#1C252B;
+    --ink:#E6EDF1; --muted:#9FB1BC; --line:#34444E;
+    --bench:#25302B;
+    --glass-fill:rgba(170,205,225,.08); --glass-stroke:#9DB5C3;
+    --water:#3F93D6; --water-edge:#A7D2F2; --tick:#D8E4EB;
+    --safety:#F2BD2C; --focus:#F2BD2C;
+    --good:#5CC48F; --warn:#E8AE55; --bad:#FF8F85;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#12181C; --wall:#1A2329; --panel:#1C252B;
+  --ink:#E6EDF1; --muted:#9FB1BC; --line:#34444E;
+  --bench:#25302B;
+  --glass-fill:rgba(170,205,225,.08); --glass-stroke:#9DB5C3;
+  --water:#3F93D6; --water-edge:#A7D2F2; --tick:#D8E4EB;
+  --safety:#F2BD2C; --focus:#F2BD2C;
+  --good:#5CC48F; --warn:#E8AE55; --bad:#FF8F85;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:1.0625rem;line-height:1.5}
+[hidden]{display:none !important}
+h1{font-size:clamp(1.5rem,2.6vw,2.05rem);line-height:1.12;margin:0;letter-spacing:-.01em}
+.btn{appearance:none;font:inherit;font-size:.95rem;padding:.45rem .9rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--glass-stroke)}
+.btn-primary{background:var(--water);border-color:var(--water);color:#fff;font-weight:700}
+button:focus-visible,input:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+
+/* Landing */
+.landing{max-width:980px;margin:0 auto;padding:2.5rem 1.25rem 3rem}
+.landing > p{color:var(--muted);max-width:60ch;margin:.5rem 0 1.75rem}
+.tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+@media (max-width:760px){.tiers{grid-template-columns:1fr}}
+.tier{appearance:none;text-align:left;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.1rem 1.2rem;cursor:pointer;display:flex;flex-direction:column;gap:.35rem;border-bottom:6px solid var(--water)}
+.tier:hover{border-color:var(--glass-stroke);border-bottom-color:var(--water)}
+.tier .t-num{font-size:2rem;font-weight:700;line-height:1}
+.tier .t-name{font-size:1.15rem;font-weight:700}
+.tier .t-desc{color:var(--muted);font-size:.95rem}
+.tier-gauge{display:flex;gap:4px;align-items:flex-end;height:26px;margin-bottom:.35rem}
+.tier-gauge i{display:block;width:10px;border-radius:2px;background:var(--line)}
+.tier-gauge i.on{background:var(--water)}
+
+/* App */
+.top{max-width:1400px;margin:0 auto;padding:1.1rem 1.25rem .5rem;display:flex;gap:1rem;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+.top p{margin:.25rem 0 0;color:var(--muted)}
+.app{max-width:1400px;margin:0 auto;padding:.4rem 1.25rem 2.5rem;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:1.25rem;align-items:start}
+@media (max-width:1040px){.app{grid-template-columns:1fr}}
+#bench{width:100%;border:0;display:block;min-height:560px;background:transparent}
+.side{display:flex;flex-direction:column;gap:1rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem 1.05rem}
+.card h2{font-size:1.15rem;margin:0 0 .45rem;line-height:1.25}
+.card p{margin:.35rem 0}
+.progress{font-size:.9rem;color:var(--muted);margin:0 0 .2rem}
+.pips{display:flex;gap:4px;margin:.1rem 0 .6rem}
+.pips i{flex:1;height:5px;border-radius:3px;background:var(--line)}
+.pips i.done{background:var(--water)}
+.pips i.now{background:var(--safety)}
+.quest{background:var(--wall);border-radius:10px;padding:.6rem .75rem;margin:0 0 .8rem;font-size:.95rem}
+.quest strong{display:block}
+.quest .row{margin-top:.4rem}
+.choices{display:flex;flex-direction:column;gap:.35rem;margin:.6rem 0 .8rem;border:0;padding:0}
+.choices legend{font-weight:700;font-size:.95rem;padding:0;margin:0 0 .3rem}
+.choices label{display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .6rem;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.choices label:has(input:checked){border-color:var(--water);background:var(--page)}
+.choices input{margin:.25rem 0 0;accent-color:var(--water)}
+.nums{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin:.6rem 0 .8rem}
+.nums input{font:inherit;font-size:1.25rem;width:7ch;padding:.35rem .5rem;border:2px solid var(--line);border-radius:8px;background:var(--page);color:var(--ink);font-variant-numeric:tabular-nums}
+.feedback{margin:.75rem 0 0;padding:.55rem .75rem;border-left:4px solid var(--line);background:var(--page);border-radius:4px;font-size:.95rem}
+.feedback:empty{display:none}
+.feedback strong{display:block}
+.feedback.good{border-color:var(--good)} .feedback.good strong{color:var(--good)}
+.feedback.warn{border-color:var(--warn)} .feedback.warn strong{color:var(--warn)}
+.feedback.bad{border-color:var(--bad)} .feedback.bad strong{color:var(--bad)}
+.offer{margin-top:.7rem}
+.offer:empty{display:none}
+.offer p{margin:0 0 .45rem}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{appearance:none;border:0;border-right:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:.92rem;padding:.35rem .7rem;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--water);color:#fff;font-weight:700}
+.loupe{width:min(100%,260px);aspect-ratio:1/1;margin:.7rem auto .2rem;border-radius:50%;overflow:hidden;border:11px solid var(--bench);box-shadow:0 0 0 2px var(--line),0 10px 24px rgba(0,0,0,.18);position:relative;background:var(--wall)}
+.loupe svg{width:100%;height:100%;display:block}
+.loupe::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 24%,rgba(255,255,255,.32),rgba(255,255,255,0) 42%);pointer-events:none}
+.muted{color:var(--muted);font-size:.93rem}
+.loadnote{padding:1rem;border:1px dashed var(--line);border-radius:10px;color:var(--muted)}
+
+/* SVG (loupe) */
+svg text{font-family:inherit}
+.wall{fill:var(--wall)}
+.glass-body{fill:var(--glass-fill)}
+.glass-line{fill:none;stroke:var(--glass-stroke);stroke-width:1.6}
+.water{fill:var(--water);fill-opacity:.78}
+.meniscus{fill:none;stroke:var(--water-edge);stroke-width:.7}
+.tick{stroke:var(--tick);stroke-width:.5}
+.tick-mid{stroke-width:.6}
+.tick-major{stroke-width:.8}
+.scale-num{fill:var(--tick);font-size:8.5px;font-weight:700}
+.aid-guide{stroke:var(--safety);stroke-width:.6;stroke-dasharray:2.4 1.4}
+.aid-level{stroke:var(--safety);stroke-width:1.6;stroke-dasharray:9 6}
+.aid-mark{stroke:var(--safety);stroke-width:1.3}
+.aid-band{fill:var(--safety);fill-opacity:.22;stroke:var(--safety);stroke-width:.5}
+.aid-arrow{fill:var(--safety);stroke:var(--bench);stroke-width:.8}
+
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);max-width:760px;width:calc(100% - 2rem);padding:1.2rem 1.3rem}
+dialog::backdrop{background:rgba(10,20,25,.45)}
+dialog h2{margin:0 0 .6rem}
+dialog h3{font-size:1rem;margin:1rem 0 .35rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem}
+.stat{background:var(--page);border-radius:8px;padding:.5rem .7rem}
+.stat b{display:block;font-size:1.35rem}
+.stat span{font-size:.88rem;color:var(--muted)}
+.log{width:100%;border-collapse:collapse;font-size:.9rem}
+.log th,.log td{text-align:left;padding:.3rem .35rem;border-bottom:1px solid var(--line);vertical-align:top}
+.log th{color:var(--muted);font-size:.83rem}
+.tablewrap{overflow-x:auto;max-height:45vh;overflow-y:auto}
+.r-good{color:var(--good);font-weight:700} .r-warn{color:var(--warn);font-weight:700} .r-bad{color:var(--bad);font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- ============ Landing ============ -->
+<main class="landing" id="landing">
+  <h1>Measuring volume</h1>
+  <p>Pick a starting point. Each one uses the same lab bench. You can change direction any time along the way.</p>
+  <div class="tiers" id="tierButtons"></div>
+</main>
+
+<!-- ============ Activity ============ -->
+<div id="appWrap" hidden>
+  <header class="top">
+    <div>
+      <h1 id="missionName">Measuring volume</h1>
+      <p id="missionSub"></p>
+    </div>
+    <div class="row">
+      <button class="btn" id="resetBench" type="button">Reset bench</button>
+      <button class="btn" id="openSummary" type="button">Summary</button>
+      <button class="btn" id="toLanding" type="button">All missions</button>
+    </div>
+  </header>
+
+  <main class="app">
+    <section aria-label="Lab bench">
+      <iframe id="bench" title="Lab bench: pour water between graduated cylinders"></iframe>
+      <p class="loadnote" id="loadNote" hidden>The lab bench couldn't be connected. Keep this file in the same folder as index.html and open it from a web address (for example, GitHub Pages), not straight from your computer's files.</p>
+    </section>
+
+    <aside class="side">
+      <section class="card" aria-labelledby="itemTitle">
+        <div class="quest" id="questBanner" hidden></div>
+        <p class="progress" id="progress"></p>
+        <div class="pips" id="pips" aria-hidden="true"></div>
+        <h2 id="itemTitle"></h2>
+        <p id="itemPrompt"></p>
+        <div id="answerArea"></div>
+        <div class="row"><button class="btn btn-primary" id="checkBtn" type="button">Check</button></div>
+        <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
+        <div class="offer" id="offer"></div>
+      </section>
+
+      <section class="card" aria-labelledby="magH">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="magH" style="margin:0">Magnifier</h2>
+          <div class="seg" role="group" aria-label="Cylinder to magnify">
+            <button type="button" data-cyl="c100" aria-pressed="true">100 mL</button>
+            <button type="button" data-cyl="c10" aria-pressed="false">10 mL</button>
+          </div>
+        </div>
+        <div class="loupe"><svg id="loupe" viewBox="0 0 72 72" role="img" aria-label="Close-up of the water level"></svg></div>
+      </section>
+
+      <section class="card" id="questCard" aria-labelledby="sqH">
+        <h2 id="sqH">Side quests</h2>
+        <p class="muted">Quick challenges that sharpen one skill from a different angle. Take one whenever you like. Your mission stays right where you left it.</p>
+        <button class="btn" id="anytimeQuest" type="button">Take a side quest</button>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<dialog id="summary" aria-labelledby="sumH">
+  <h2 id="sumH">Session summary</h2>
+  <div id="sumBody"></div>
+  <div class="row" style="margin-top:1rem;justify-content:flex-end">
+    <button class="btn btn-primary" id="closeSummary" type="button">Close</button>
+  </div>
+</dialog>
+
+<!-- Preview builds put the baseline page here. The GitHub version leaves it empty and loads index.html. -->
+<script type="application/json" id="baseline-src"></script>
+
+<script>
+(function(){
+"use strict";
+var NS = "http://www.w3.org/2000/svg";
+function $(id){ return document.getElementById(id); }
+function el(tag, attrs, parent){
+  var e = document.createElementNS(NS, tag);
+  if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function h(tag, props, kids){
+  var e = document.createElement(tag);
+  if (props) for (var k in props){
+    if (k === "text") e.textContent = props[k];
+    else if (k === "cls") e.className = props[k];
+    else if (k.slice(0,2) === "on") e.addEventListener(k.slice(2), props[k]);
+    else e.setAttribute(k, props[k]);
+  }
+  (kids || []).forEach(function(c){ if (c) e.appendChild(c); });
+  return e;
+}
+
+/* ---------- Geometry of the baseline bench (read-only mirror) ---------- */
+var G = {
+  c100: { id:"c100", name:"100 mL cylinder", short:"100 mL", cx:330, inner:50, rim:149, base:530, px:3.4, minor:1, dec:1, m:3, wall:2.5,
+          minorWord:"1 mL", placeWord:"tenths place (0.1 mL)", labelX:0 },
+  c10:  { id:"c10", name:"10 mL cylinder", short:"10 mL", cx:560, inner:30, rim:185, base:530, px:30, minor:0.1, dec:2, m:2.2, wall:2.5,
+          minorWord:"0.1 mL", placeWord:"hundredths place (0.01 mL)", labelX:0 }
+};
+["c100","c10"].forEach(function(k){
+  var c = G[k]; c.L = c.cx - c.inner/2; c.R = c.cx + c.inner/2; c.topMark = 100 * c.minor;
+});
+function levelY(c, v){ return c.base - v * c.px; }
+function markStr(c, v){ return (Math.round(v / c.minor) * c.minor).toFixed(c.dec - 1); }
+
+/* ---------- Connect to the baseline ---------- */
+/*
+  Where the bench lives. "index.html" means "the file right next to this one".
+  If the bench is in a different repo, put its full address here, for example:
+  var BENCH_URL = "https://btoon-maker.github.io/Measuring-Volume-Sandbox/";
+  You can also add ?bench=<address> to this page's URL.
+*/
+var BENCH_URL = "index.html";
+var frame = $("bench"), D = null, ready = false;
+var V = { c100:0, c10:0 };
+var lastPour = null;
+
+function benchProblem(msg){
+  var n = $("loadNote");
+  n.textContent = msg;
+  n.hidden = false; frame.hidden = true;
+}
+var benchUrlUsed = "";
+(function loadBaseline(){
+  var emb = $("baseline-src").textContent.trim();
+  if (emb){ frame.srcdoc = JSON.parse(emb); benchUrlUsed = "(built in)"; return; }
+  var qp = new URLSearchParams(location.search).get("bench");
+  var url = qp || BENCH_URL;
+  try { benchUrlUsed = new URL(url, location.href).href; } catch(e){ benchUrlUsed = url; }
+  if (location.protocol === "file:"){
+    benchProblem("This page was opened straight from your computer's files, and browsers block the lab bench from connecting that way. Open it from its web address instead (for example, your GitHub Pages link ending in /ladder.html).");
+    return;
+  }
+  frame.src = url;
+  setTimeout(function(){
+    if (!ready && $("loadNote").hidden) benchProblem("The lab bench is taking too long to load from " + benchUrlUsed + ". Check that the address is right and that GitHub Pages has finished publishing.");
+  }, 12000);
+})();
+
+frame.addEventListener("load", function(){
+  if (ready) return;
+  try {
+    D = frame.contentDocument;
+  } catch(e){ D = null; }
+  if (!D){
+    benchProblem("The lab bench at " + benchUrlUsed + " is on a different website, so this page isn't allowed to connect to it. Put ladder.html on the same site as the bench (any btoon-maker.github.io address works).");
+    return;
+  }
+  if (!D.getElementById("stage")){
+    benchProblem("A page loaded from " + benchUrlUsed + ", but it isn't the lab bench (it may be GitHub's \"page not found\"). Put ladder.html in the same folder as the bench's index.html, or set BENCH_URL near the top of the script to the bench's address.");
+    return;
+  }
+  var st = D.createElement("style");
+  st.textContent =
+    ".top,.skip{display:none !important}" +
+    ".layout{padding:0 !important;max-width:none !important}" +
+    "body{background:transparent !important}" +
+    ".aid-guide{stroke:var(--safety);stroke-width:.9;stroke-dasharray:3 2}" +
+    ".aid-level{stroke:var(--safety);stroke-width:1.6;stroke-dasharray:9 6}" +
+    ".aid-mark{stroke:var(--safety);stroke-width:1.6}" +
+    ".aid-band{fill:var(--safety);fill-opacity:.22;stroke:var(--safety);stroke-width:.6}" +
+    ".aid-arrow{fill:var(--safety);stroke:var(--bench);stroke-width:.8}" +
+    "#ladder-aids{pointer-events:none}";
+  D.head.appendChild(st);
+  var ov = D.createElementNS(NS, "g");
+  ov.setAttribute("id", "ladder-aids");
+  D.getElementById("stage").appendChild(ov);
+
+  // Keep the frame as tall as its content
+  var fit = function(){ frame.style.height = (D.documentElement.scrollHeight + 4) + "px"; };
+  fit();
+  try { new (frame.contentWindow.ResizeObserver)(fit).observe(D.body); } catch(e){ window.addEventListener("resize", fit); }
+
+  // Watch the pour button to learn what moved during each pour
+  var pb = D.getElementById("pour");
+  new MutationObserver(function(){
+    var on = pb.getAttribute("aria-pressed") === "true";
+    if (on){
+      lastPour = { t: Date.now(), from: radio("from"), to: radio("to"), before: readAll(), after: null };
+    } else if (lastPour && !lastPour.after){
+      setTimeout(function(){ if (lastPour) lastPour.after = readAll(); }, 350);
+    }
+  }).observe(pb, { attributes:true, attributeFilter:["aria-pressed"] });
+
+  ready = true;
+  requestAnimationFrame(loop);
+});
+
+function radio(name){
+  var r = D.querySelector('input[name="'+name+'"]:checked');
+  return r ? r.value : null;
+}
+function readVol(id){
+  var p = D.querySelector("#g-" + id + " path.water");
+  var d = p && p.getAttribute("d");
+  if (!d) return 0;
+  var n = d.match(/-?\d*\.?\d+(?:e-?\d+)?/g);
+  if (!n || n.length < 6) return 0;
+  var c = G[id];
+  return Math.max(0, (c.base - parseFloat(n[5])) / c.px);
+}
+function readAll(){ return { c100: readVol("c100"), c10: readVol("c10") }; }
+function cylMoving(id){
+  var mv = D.getElementById("mv-" + id);
+  return !!(mv && (mv.style.transform || mv.classList.contains("tipped")));
+}
+
+/* ---------- Missions ---------- */
+var MISSIONS = {
+  1: { name:"Level Sense", desc:"Compare water levels: higher or lower, taller or shorter, bigger or smaller changes." },
+  2: { name:"Scale Detective", desc:"Work out what the marks mean and where the curved surface sits." },
+  3: { name:"Precision Reading", desc:"Read and measure volumes with the precision each cylinder supports." }
+};
+
+function needWater(c, v){
+  if (v <= 0.0004) return "Pour some water into the " + c.name + " first.";
+  if (v / c.minor > 100.08) return "The water is above the top mark of the " + c.name + ". Pour some out first.";
+  if (v / c.minor < 1) return "The water is below the lowest mark of the " + c.name + ". Add a bit more.";
+  return null;
+}
+
+/* Reading precision grader, shared by Tier 2 and Tier 3 */
+function gradeReading(c, raw, v){
+  var s = String(raw || "").trim().replace(/\s*ml$/i, "");
+  var setup = needWater(c, v);
+  if (setup) return { ok:null, msg:setup };
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return { ok:null, msg:"Type your reading as a number, like " + (c.dec === 1 ? "42.5" : "6.25") + "." };
+  var val = parseFloat(s);
+  var decs = s.indexOf(".") >= 0 ? s.split(".")[1].length : 0;
+  var diff = Math.abs(val - v);
+  var mTop = Math.min(c.m, v * c.px) / c.px;
+  var tol = decs < c.dec ? c.minor : c.minor * 0.3 + 1e-9;
+  if (diff <= tol){
+    if (decs === c.dec) return { ok:true, title:"Supported reading", msg:"That matches the bottom of the curve, with one estimated digit past the " + c.minorWord + " marks." };
+    if (decs < c.dec) return { ok:false, err:"digits", title:"Add a digit", msg:"You're in the right spot. The small marks are " + c.minorWord + " apart, so the scale lets you estimate one more digit. Report to the " + c.placeWord + "." };
+    return { ok:false, err:"digits", title:"Too many digits", msg:"Close, but this scale can't back up that many digits. Report to the " + c.placeWord + "." };
+  }
+  if (val > v && Math.abs(val - (v + mTop)) <= c.minor * 0.36)
+    return { ok:false, err:"meniscus", title:"Check the curve", msg:"That value matches the edges, where the water climbs the glass. Read the lowest point of the curve." };
+  return { ok:false, err:"scale", title:"Look again", msg:"Check what each small mark is worth, find the two marks around the bottom of the curve, then estimate how far past the lower one it sits." };
+}
+
+function choice(o){ o.type = "choice"; return o; }
+
+var ITEMS = {
+  1: [
+    choice({ id:"t1-compare", title:"Which is higher?", cyl:"c100", skill:"height", aid:"levels",
+      prompt:"Pour some water into both cylinders, any amounts. Which water level sits higher on the bench?",
+      choices:["The 100 mL cylinder's","The 10 mL cylinder's","About the same height"],
+      answer:function(v){
+        if (v.c100 < 0.5 || v.c10 < 0.05) return { setup:"Put some water in both cylinders first." };
+        var d = levelY(G.c100, v.c100) - levelY(G.c10, v.c10);
+        if (Math.abs(d) < 5) return [0,1,2];
+        if (Math.abs(d) < 12) return [d < 0 ? 0 : 1, 2];
+        return [d < 0 ? 0 : 1];
+      },
+      ok:"Right. The dashed lines show each level across the whole bench.",
+      miss:"Follow the dashed lines across the bench. The line nearer the top of the picture is the higher level.",
+      hint2:"Put a finger on each dashed line and compare which one is closer to the top of the screen."
+    }),
+    choice({ id:"t1-transfer", title:"Where did it go?", cyl:"c10", skill:"direction", aid:"arrows",
+      prompt:"Pour from the 100 mL cylinder into the 10 mL cylinder for a moment, then let go. What happened to the two levels?",
+      choices:["100 mL went down, 10 mL went up","Both went up","100 mL went up, 10 mL went down","Neither changed"],
+      answer:function(v, ctx){
+        var lp = ctx.lastPour;
+        if (!lp || lp.t < ctx.start || lp.from !== "c100" || lp.to !== "c10" || !lp.after)
+          return { setup:"Do the pour first: set Pour from to 100 mL and Pour into to 10 mL, then hold to pour. If the 100 mL cylinder is empty, fill it from the stock water first." };
+        if (lp.after.c100 > lp.before.c100 - 0.02) return { setup:"No water moved. Make sure the 100 mL cylinder has water in it, then pour again." };
+        return [0];
+      },
+      ok:"Yes. Water leaves one container and shows up in the other. The arrows show which way each level moved.",
+      miss:"Watch the arrows next to each cylinder after you pour. They point the way each level moved.",
+      hint2:"Water poured out of a container makes its level drop. Water poured in makes a level rise."
+    }),
+    choice({ id:"t1-width", title:"Same water, different look", cyl:"c100", skill:"width", aid:"levels",
+      prompt:"Fill the 10 mL cylinder about halfway. Empty the 100 mL cylinder into Waste. Then pour all the 10 mL cylinder's water into the 100 mL cylinder. Does that same water stand taller or shorter now?",
+      choices:["Taller","Shorter","The same height"],
+      answer:function(v){
+        if (!(v.c10 < 0.005 && v.c100 > 0.5 && v.c100 <= 12))
+          return { setup:"Set it up first: the 10 mL cylinder should end up empty, and the 100 mL cylinder should hold only the water that came from it." };
+        return [1];
+      },
+      ok:"Right. The 100 mL cylinder is wider, so the same water spreads out and stands lower.",
+      miss:"Compare how wide the two cylinders are. A wider container spreads the same water into a shorter column.",
+      hint2:"Picture pouring a cup of juice into a wide bowl. Does it stand taller or shorter than it did in the cup?"
+    }),
+    choice({ id:"t1-drops", title:"Which one moves more?", cyl:"c10", skill:"sensitivity", aid:"arrows",
+      prompt:"Switch Speed to Drops. Add a few drops to each cylinder. In which cylinder does each drop move the level farther?",
+      choices:["The 10 mL cylinder","The 100 mL cylinder","About the same in both"],
+      answer:function(v){
+        if (v.c100 < 0.3 || v.c10 < 0.03) return { setup:"Both cylinders need some water before you compare drops." };
+        return [0];
+      },
+      ok:"Yes. In the narrow 10 mL cylinder a drop has less room to spread, so the level moves farther. That makes small changes easier to see.",
+      miss:"Watch the arrows after each set of drops. The narrow cylinder gives a drop less room to spread out.",
+      hint2:"Try 5 drops into the 10 mL cylinder, then 5 into the 100 mL cylinder, and watch each level."
+    }),
+    { id:"t1-choose", type:"multi", title:"Pick the right tool", cyl:"c10", skill:"choose", aid:"none",
+      prompt:"Use what you noticed about the two cylinders.",
+      parts:[
+        { q:"You need 7 mL, and small differences matter. Which cylinder shows it best?", choices:["10 mL cylinder","100 mL cylinder"], answer:0 },
+        { q:"You need 80 mL. Which cylinder can hold it?", choices:["10 mL cylinder","100 mL cylinder"], answer:1 }
+      ],
+      ok:"Nice. The 10 mL cylinder shows small amounts in more detail, and the 100 mL cylinder holds more.",
+      miss:"Think about which cylinder shows small changes as bigger movements, and which one has room for more water.",
+      hint2:"The 10 mL cylinder only goes up to about 11 mL before it overflows."
+    }
+  ],
+  2: [
+    choice({ id:"t2-value100", title:"What's a small mark worth?", cyl:"c100", skill:"value", aid:"band10to20", loupeAt:15,
+      prompt:"On the 100 mL cylinder, look between the labeled 10 and 20 lines (highlighted). Count the spaces. What is each small mark worth?",
+      choices:["10 mL","5 mL","1 mL","0.1 mL"], answer:[2],
+      ok:"Right. 10 mL split into 10 spaces makes each space 1 mL.",
+      miss:"Count the spaces between the two labeled lines, not the lines themselves. Then split 10 mL into that many parts." }),
+    { id:"t2-bracket100", type:"pair", title:"Find the curve", cyl:"c100", skill:"bracket", aid:"guide",
+      prompt:"Pour water into the 100 mL cylinder. The guide line marks the bottom of the curve. Which two marks is it between?",
+      ok:"Right. Those are the marks just below and just above the bottom of the curve." },
+    choice({ id:"t2-value10", title:"A finer scale", cyl:"c10", skill:"value", aid:"band4to5", loupeAt:4.5,
+      prompt:"Now the 10 mL cylinder. Look between the labeled 4 and 5 lines (highlighted). What is each small mark worth?",
+      choices:["1 mL","0.5 mL","0.1 mL","0.01 mL"], answer:[2],
+      ok:"Right. 1 mL split into 10 spaces makes each space 0.1 mL.",
+      miss:"There are 10 spaces between the labeled 4 and 5 lines. Split 1 mL into 10 equal parts." }),
+    { id:"t2-bracket10", type:"pair", title:"Find the curve again", cyl:"c10", skill:"bracket", aid:"guide",
+      prompt:"Pour water into the 10 mL cylinder. Which two marks is the guide line between?",
+      ok:"Right. On this cylinder, neighboring marks are 0.1 mL apart." },
+    { id:"t2-estimate10", type:"estimate", title:"Estimate the last digit", cyl:"c10", skill:"estimate", aid:"guide",
+      prompt:"Picture the space between those two marks split into ten equal parts. How far past the lower mark is the guide line?",
+      ok:"Good estimate. That estimated part becomes the last digit of your reading." },
+    { id:"t2-read10", type:"number", title:"Put it together", cyl:"c10", skill:"reading", aid:"guide",
+      prompt:"Read the 10 mL cylinder. Use the marks you found and your estimate." }
+  ],
+  3: [
+    { id:"t3-read100", type:"number", title:"Read the 100 mL cylinder", cyl:"c100", skill:"reading", aid:"none",
+      prompt:"Pour any amount into the 100 mL cylinder. Record its volume with the precision the scale supports." },
+    { id:"t3-read10", type:"number", title:"Read the 10 mL cylinder", cyl:"c10", skill:"reading", aid:"none",
+      prompt:"Pour any amount into the 10 mL cylinder. Record its volume with the precision the scale supports." },
+    { id:"t3-target10", type:"target", title:"Measure 6.45 mL", cyl:"c10", skill:"target", aid:"none", target:6.45,
+      prompt:"Measure exactly 6.45 mL in the 10 mL cylinder, then check." },
+    { id:"t3-target100", type:"target", title:"Measure 37.0 mL", cyl:"c100", skill:"target", aid:"none", target:37,
+      prompt:"Measure exactly 37.0 mL in the 100 mL cylinder, then check." },
+    { id:"t3-transfer", type:"number", title:"Transfer and re-measure", cyl:"c100", skill:"reading", aid:"none",
+      setup:function(v){
+        if (!(v.c10 < 0.005 && v.c100 > 7 && v.c100 < 9))
+          return "Set it up first: measure 8.00 mL in the 10 mL cylinder, empty the 100 mL cylinder, then pour all 8.00 mL into it.";
+        return null;
+      },
+      prompt:"Measure 8.00 mL in the 10 mL cylinder. Empty the 100 mL cylinder, then pour all of that water into it. Record the 100 mL cylinder's reading." },
+    choice({ id:"t3-why", title:"Why the change?", cyl:"c100", skill:"value", aid:"none",
+      prompt:"Your 8.00 mL became a reading like 8.0 mL. Why is the second reading reported with fewer digits?",
+      choices:["Some water was lost in the transfer","The 100 mL cylinder's marks are 1 mL apart, so it only supports tenths","Bigger containers always need fewer digits","The first reading must have been wrong"],
+      answer:[1],
+      ok:"Exactly. Precision comes from the instrument's scale, not from the water.",
+      miss:"Compare what one small mark is worth on each cylinder. That sets how many digits each can support." })
+  ]
+};
+
+/* ---------- Side quests (built on the fly from the tier below) ---------- */
+function questItem(key, cylId){
+  var c = G[cylId];
+  if (key === "q2-value") return choice({ id:key, title:"What's a mark worth?", cyl:cylId, skill:"value",
+    aid: cylId === "c100" ? "band10to20" : "band4to5", loupeAt: cylId === "c100" ? 15 : 4.5,
+    prompt: cylId === "c100" ? "Look between the highlighted 10 and 20 lines on the 100 mL cylinder. What is each small mark worth?" : "Look between the highlighted 4 and 5 lines on the 10 mL cylinder. What is each small mark worth?",
+    choices: cylId === "c100" ? ["10 mL","5 mL","1 mL","0.1 mL"] : ["1 mL","0.5 mL","0.1 mL","0.01 mL"], answer:[2],
+    ok:"Right. Count the spaces, then split the labeled amount into that many parts.",
+    miss:"Count the spaces between the two labeled lines. There are 10. Split the labeled amount into 10 parts." });
+  if (key === "q2-bracket") return { id:key, type:"pair", title:"Find the curve", cyl:cylId, skill:"bracket", aid:"guide",
+    prompt:"The guide line marks the bottom of the curve in the " + c.name + ". Which two marks is it between?",
+    ok:"Right. Those are the marks on either side of the curve's lowest point." };
+  if (key === "q2-estimate") return { id:key, type:"estimate", title:"Estimate the last digit", cyl:cylId, skill:"estimate", aid:"guide",
+    prompt:"In the " + c.name + ", picture the space between the two marks around the guide line split into ten parts. How far past the lower mark is the line?",
+    ok:"Good. That part is the digit you add at the end of a reading." };
+  if (key === "q1-abovebelow") return { id:key, type:"abovebelow", title:"Above or below?", cyl:cylId, skill:"height", aid:"refmark",
+    prompt:"", ok:"Right. Where the lowest point of the curve sits is what counts." };
+  if (key === "q1-closer") return choice({ id:key, title:"Closer to which mark?", cyl:cylId, skill:"closer", aid:"pairmarks",
+    prompt:"Two marks are highlighted in the " + c.name + ". Is the lowest point of the water's curve closer to the lower mark, the upper mark, or about halfway?",
+    choices:["Closer to the lower mark","About halfway","Closer to the upper mark"],
+    answer:function(v){
+      var setup = needWater(c, v); if (setup) return { setup:setup };
+      var n = v / c.minor, f = n - Math.floor(n + 1e-9);
+      if (f < 0.06 || f > 0.94) return { setup:"The curve is sitting right on a mark. Pour a little more so it lands between two marks." };
+      var acc = [];
+      if (f < 0.46) acc.push(0);
+      if (f > 0.34 && f < 0.66) acc.push(1);
+      if (f > 0.54) acc.push(2);
+      return acc;
+    },
+    ok:"Right. Judging where the curve sits between marks is how you estimate the last digit.",
+    miss:"Look only at the lowest point of the curve and compare its distance to each highlighted mark." });
+  if (key === "q1-stretch") return choice({ id:key, title:"Same 1 mL, different stretch", cyl:"c10", skill:"value", aid:"stretch", loupeAt:4.5,
+    prompt:"The highlighted band on each cylinder holds exactly 1 mL. Which cylinder shows that 1 mL as a taller stretch of glass?",
+    choices:["The 10 mL cylinder","The 100 mL cylinder","They're the same"], answer:[0],
+    ok:"Right. The 10 mL cylinder stretches 1 mL out, so it has room for ten small marks inside it.",
+    miss:"Compare the heights of the two highlighted bands on the bench." });
+  return null;
+}
+var QUEST_ROUTES = {
+  3: { digits:["q2-value","q2-estimate"], meniscus:["q2-bracket","q2-estimate"], scale:["q2-value","q2-bracket"],
+       target:["q2-bracket","q2-estimate"], value:["q2-value","q2-bracket"], reading:["q2-bracket","q2-estimate"] },
+  2: { bracket:["q1-abovebelow","q1-closer"], value:["q1-stretch","q1-abovebelow"], estimate:["q1-closer","q1-abovebelow"],
+       digits:["q1-closer","q1-stretch"], meniscus:["q1-abovebelow","q1-closer"], scale:["q1-stretch","q1-abovebelow"], reading:["q1-abovebelow","q1-closer"] }
+};
+var QUEST_NAMES = { 3:"Scale check", 2:"Level check" };
+
+/* ---------- State ---------- */
+var S = {
+  startTier: null, tier: 3, idx: 0,
+  quest: null,
+  misses: {}, streak: 0, jumpOffered: {},
+  itemStart: Date.now(), answered: false,
+  loupeCyl: "c100",
+  t0: Date.now(), log: [], moves: [], firstTry: 0, questsOffered: 0, questsTaken: 0, questsChosen: 0, completed: {}
+};
+function curItem(){ return S.quest ? S.quest.items[S.quest.idx] : ITEMS[S.tier][S.idx]; }
+function modeTier(){ return S.quest ? S.quest.tier : S.tier; }
+function missKey(){ return S.quest ? "q-" + S.quest.tier + "-" + S.quest.idx + "-" + S.quest.n : "m-" + S.tier + "-" + S.idx; }
+function stamp(){ var s = Math.round((Date.now() - S.t0) / 1000); return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
+function where(){ return S.quest ? "Side quest (Tier " + S.quest.tier + ")" : MISSIONS[S.tier].name + " (Tier " + S.tier + ")"; }
+function addMove(text){ S.moves.push({ time: stamp(), text: text }); }
+
+/* ---------- Landing ---------- */
+[1,2,3].forEach(function(t){
+  var g = h("span", { cls:"tier-gauge", "aria-hidden":"true" });
+  [1,2,3].forEach(function(k){ var i = h("i", { cls: k <= t ? "on" : "" }); i.style.height = (8 + k*6) + "px"; g.appendChild(i); });
+  var b = h("button", { cls:"tier", type:"button", onclick:function(){ startTier(t, true); } }, [
+    g,
+    h("span", { cls:"t-num", text:"Tier " + t }),
+    h("span", { cls:"t-name", text:MISSIONS[t].name }),
+    h("span", { cls:"t-desc", text:MISSIONS[t].desc })
+  ]);
+  $("tierButtons").appendChild(b);
+});
+
+function startTier(t, fromLanding){
+  if (S.startTier === null) { S.startTier = t; S.t0 = Date.now(); addMove("Started at Tier " + t + " (" + MISSIONS[t].name + ")"); }
+  else if (fromLanding && t !== S.tier) addMove("Chose Tier " + t + " (" + MISSIONS[t].name + ") from the mission list");
+  S.tier = t; S.idx = 0; S.quest = null; S.streak = 0;
+  $("landing").hidden = true; $("appWrap").hidden = false;
+  try { history.replaceState(null, "", "?tier=" + t); } catch(e){}
+  renderItem();
+  if (ready) setTimeout(function(){ frame.style.height = (D.documentElement.scrollHeight + 4) + "px"; }, 30);
+}
+$("toLanding").addEventListener("click", function(){
+  $("appWrap").hidden = true; $("landing").hidden = false;
+  try { history.replaceState(null, "", location.pathname); } catch(e){}
+});
+$("resetBench").addEventListener("click", function(){
+  if (ready) D.getElementById("reset").click();
+  lastPour = null;
+});
+
+/* ---------- Rendering an item ---------- */
+function renderItem(){
+  var it = curItem();
+  S.itemStart = Date.now(); S.answered = false;
+  $("missionName").textContent = MISSIONS[S.tier].name;
+  $("missionSub").textContent = MISSIONS[S.tier].desc;
+
+  // quest banner
+  var qb = $("questBanner");
+  if (S.quest){
+    qb.hidden = false; qb.innerHTML = "";
+    qb.appendChild(h("strong", { text:"Side quest: " + QUEST_NAMES[S.quest.from] }));
+    qb.appendChild(h("span", { text:"Challenge " + (S.quest.idx + 1) + " of " + S.quest.items.length + ". When you finish, you'll pick up your mission right where you left it." }));
+    qb.appendChild(h("div", { cls:"row" }, [ h("button", { cls:"btn", type:"button", text:"Back to mission now", onclick:function(){ endQuest(false); } }) ]));
+  } else qb.hidden = true;
+
+  // progress
+  var list = S.quest ? S.quest.items : ITEMS[S.tier];
+  var pos = S.quest ? S.quest.idx : S.idx;
+  $("progress").textContent = (S.quest ? "Side quest challenge " : "Challenge ") + (pos + 1) + " of " + list.length;
+  var pips = $("pips"); pips.innerHTML = "";
+  list.forEach(function(_, i){ pips.appendChild(h("i", { cls: i < pos ? "done" : (i === pos ? "now" : "") })); });
+
+  $("itemTitle").textContent = it.title;
+  $("itemPrompt").textContent = promptFor(it);
+
+  var area = $("answerArea"); area.innerHTML = "";
+  buildAnswer(it, area);
+
+  $("checkBtn").hidden = false;
+  $("checkBtn").textContent = it.type === "target" ? "Check my pour" : "Check";
+  $("feedback").textContent = ""; $("feedback").className = "feedback";
+  $("offer").innerHTML = "";
+
+  $("questCard").hidden = (S.tier === 1 && !S.quest) || !!S.quest;
+  setLoupe(it.cyl);
+}
+
+function promptFor(it){
+  if (it.type === "abovebelow"){
+    var c = G[it.cyl];
+    if (it.ref == null) it.ref = pickRef(c, V[it.cyl]);
+    return "One mark on the " + c.name + " is highlighted (" + markStr(c, it.ref) + " mL). Is the lowest point of the water's curve above it or below it?";
+  }
+  return it.prompt;
+}
+function pickRef(c, v){
+  var n = v / c.minor;
+  if (n < 1) return 5 * c.minor;
+  var lo = Math.floor(n / 5) * 5, hi = lo + 5;
+  var pick = (n - lo) >= (hi - n) ? lo : hi;
+  if (Math.abs(n - pick) < 0.3) pick = pick === lo ? hi : lo;
+  pick = Math.max(5, Math.min(100, pick));
+  return pick * c.minor;
+}
+
+function radioGroup(name, choices, legend){
+  var fs = h("fieldset", { cls:"choices" });
+  if (legend) fs.appendChild(h("legend", { text:legend }));
+  choices.forEach(function(ch, i){
+    fs.appendChild(h("label", null, [ h("input", { type:"radio", name:name, value:String(i) }), h("span", { text:ch }) ]));
+  });
+  return fs;
+}
+function buildAnswer(it, area){
+  var c = G[it.cyl];
+  if (it.type === "choice") area.appendChild(radioGroup("ans", it.choices));
+  else if (it.type === "abovebelow") area.appendChild(radioGroup("ans", ["Above the mark","Below the mark"]));
+  else if (it.type === "estimate") area.appendChild(radioGroup("ans", [
+    "Right on the lower mark", "A little past (about 1 to 3 parts)", "About halfway (about 4 to 6 parts)", "Nearly to the next mark (about 7 to 9 parts)"
+  ]));
+  else if (it.type === "multi") it.parts.forEach(function(p, i){ area.appendChild(radioGroup("ans" + i, p.choices, p.q)); });
+  else if (it.type === "pair"){
+    var a = h("input", { id:"pairLo", inputmode:"decimal", autocomplete:"off", "aria-label":"Lower mark in mL" });
+    var b = h("input", { id:"pairHi", inputmode:"decimal", autocomplete:"off", "aria-label":"Upper mark in mL" });
+    area.appendChild(h("div", { cls:"nums" }, [ h("span", { text:"Between" }), a, h("span", { text:"and" }), b, h("span", { text:"mL" }) ]));
+  } else if (it.type === "number"){
+    var n = h("input", { id:"numIn", inputmode:"decimal", autocomplete:"off", "aria-label":"Reading of the " + c.name + " in mL" });
+    n.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); check(); } });
+    area.appendChild(h("div", { cls:"nums" }, [ h("span", { text:"Reading:" }), n, h("span", { text:"mL" }) ]));
+  }
+}
+function chosen(name){
+  var r = document.querySelector('#answerArea input[name="'+name+'"]:checked');
+  return r ? +r.value : null;
+}
+
+/* ---------- Checking ---------- */
+function check(){
+  if (!ready) return;
+  var it = curItem(), c = G[it.cyl];
+  V = readAll();
+  var v = V[it.cyl];
+  var res, answerText = "";
+  var ctx = { lastPour: lastPour, start: S.itemStart };
+
+  if (it.type === "choice" || it.type === "abovebelow" || it.type === "estimate"){
+    var sel = chosen("ans");
+    if (sel === null) return show({ ok:null, msg:"Choose an answer first." });
+    var labels = document.querySelectorAll("#answerArea label span");
+    answerText = labels[sel] ? labels[sel].textContent : String(sel);
+    var acc;
+    if (it.type === "choice"){
+      acc = typeof it.answer === "function" ? it.answer(V, ctx) : it.answer;
+    } else if (it.type === "abovebelow"){
+      var s1 = needWater(c, v);
+      if (s1) acc = { setup:s1 };
+      else if (Math.abs(v - it.ref) < c.minor * 0.15) acc = { setup:"The curve is too close to the highlighted mark to call. Pour a little more or a little out, then check." };
+      else acc = [v > it.ref ? 0 : 1];
+    } else {
+      var s2 = needWater(c, v);
+      if (s2) acc = { setup:s2 };
+      else {
+        var n = v / c.minor, f = n - Math.floor(n + 1e-9);
+        var bucket = function(x){ return (x < 0.05 || x > 0.95) ? 0 : (x < 0.35 ? 1 : (x < 0.65 ? 2 : 3)); };
+        acc = [bucket(f), bucket(Math.max(0, f - 0.07)), bucket(Math.min(0.999, f + 0.07))];
+        if (f > 0.93) acc.push(3);
+        if (f < 0.07) acc.push(1);
+      }
+    }
+    if (acc && acc.setup) res = { ok:null, msg:acc.setup };
+    else if (acc.indexOf(sel) >= 0) res = { ok:true, msg: it.ok || "Right." };
+    else {
+      var msg = it.miss;
+      if (it.type === "abovebelow") msg = "Look at the lowest point of the curve, not the edges where the water climbs the glass. Is that point higher or lower than the highlighted mark?";
+      if (it.type === "estimate") msg = "Look at the gap between the two marks around the guide line. Is the line near the lower mark, near the middle, or near the upper mark?";
+      res = { ok:false, err: it.skill, msg: msg };
+    }
+  }
+  else if (it.type === "multi"){
+    var picks = it.parts.map(function(_, i){ return chosen("ans" + i); });
+    if (picks.indexOf(null) >= 0) return show({ ok:null, msg:"Answer both parts first." });
+    answerText = picks.map(function(p, i){ return it.parts[i].choices[p]; }).join(" / ");
+    var allOk = picks.every(function(p, i){ return p === it.parts[i].answer; });
+    res = allOk ? { ok:true, msg:it.ok } : { ok:false, err:it.skill, msg:it.miss };
+  }
+  else if (it.type === "pair"){
+    var lo = $("pairLo").value.trim(), hi = $("pairHi").value.trim();
+    answerText = lo + " to " + hi + " mL";
+    var s3 = needWater(c, v);
+    if (s3) res = { ok:null, msg:s3 };
+    else if (!/^\d*\.?\d+$/.test(lo) || !/^\d*\.?\d+$/.test(hi)) res = { ok:null, msg:"Type a number in both boxes." };
+    else {
+      var a = parseFloat(lo) / c.minor, b = parseFloat(hi) / c.minor, nn = v / c.minor;
+      if (a > b){ var tmp = a; a = b; b = tmp; }
+      var adjacent = Math.abs(b - a - 1) < 1e-6 && Math.abs(a - Math.round(a)) < 1e-6;
+      if (adjacent && nn >= a - 0.06 && nn <= b + 0.06) res = { ok:true, msg:it.ok };
+      else if (!adjacent) res = { ok:false, err:"bracket", msg:"Those two marks aren't neighbors. Pick the mark right below the guide line and the one right above it. On this cylinder they're " + c.minorWord + " apart." };
+      else res = { ok:false, err:"bracket", msg:"The guide line isn't between those marks. Find where it crosses the scale, then read the marks on either side." };
+    }
+  }
+  else if (it.type === "number"){
+    var raw = $("numIn").value;
+    answerText = raw.trim() + " mL";
+    var pre = it.setup ? it.setup(V) : null;
+    res = pre ? { ok:null, msg:pre } : gradeReading(c, raw, v);
+    if (res.ok === false && modeTier() === 2) res.msg += " The guide line shows exactly where to read.";
+  }
+  else if (it.type === "target"){
+    answerText = "stored " + v.toFixed(3) + " mL";
+    var tol = c.minor * 0.3 + 1e-9, d = v - it.target;
+    if (v <= 0.0004) res = { ok:null, msg:"Pour some water into the " + c.name + " first." };
+    else if (Math.abs(d) <= tol) res = { ok:true, msg:"On target. The level matches " + it.target.toFixed(c.dec) + " mL within what the scale can show." };
+    else if (Math.abs(d) <= c.minor) res = { ok:false, err:"target", msg:"Close, but " + (d > 0 ? "a bit high" : "a bit low") + ". Switch to Slow or Drops as you get near the mark." };
+    else res = { ok:false, err:"target", msg:(d > 0 ? "Too much" : "Too little") + ", by more than one small mark. Check which mark matches " + it.target.toFixed(c.dec) + " mL, then adjust." };
+  }
+  show(res, answerText);
+}
+
+function show(res, answerText){
+  var fb = $("feedback"), it = curItem();
+  fb.innerHTML = "";
+  if (res.ok === null){
+    fb.className = "feedback warn";
+    fb.appendChild(h("strong", { text:"Set up first" }));
+    fb.appendChild(h("span", { text:res.msg }));
+    return;
+  }
+  var key = missKey();
+  S.log.push({ time:stamp(), where:where(), item:it.title, answer:answerText || "", result: res.ok ? "Correct" : (res.title || "Try again"), ok:res.ok });
+  if (res.ok){
+    var first = !S.misses[key];
+    if (first){ S.firstTry++; S.streak++; } else S.streak = 0;
+    fb.className = "feedback good";
+    fb.appendChild(h("strong", { text: res.title || "Got it" }));
+    fb.appendChild(h("span", { text:res.msg }));
+    $("checkBtn").hidden = true;
+    afterCorrect();
+  } else {
+    S.misses[key] = (S.misses[key] || 0) + 1;
+    S.streak = 0;
+    fb.className = "feedback bad";
+    fb.appendChild(h("strong", { text: res.title || "Not yet" }));
+    var extra = (S.misses[key] >= 2 && modeTier() === 1 && it.hint2) ? " Tip: " + it.hint2 : "";
+    fb.appendChild(h("span", { text:res.msg + extra }));
+    if (S.misses[key] === 2 && !S.quest && S.tier > 1) offerQuest(res.err || it.skill);
+  }
+}
+
+/* ---------- Flow ---------- */
+function afterCorrect(){
+  var off = $("offer"); off.innerHTML = "";
+  if (S.quest){
+    if (S.quest.idx < S.quest.items.length - 1){
+      off.appendChild(h("button", { cls:"btn btn-primary", type:"button", text:"Next side quest challenge", onclick:function(){ S.quest.idx++; renderItem(); } }));
+    } else {
+      off.appendChild(h("p", { text:"Side quest complete. Your mission is waiting right where you left it." }));
+      off.appendChild(h("button", { cls:"btn btn-primary", type:"button", text:"Back to mission", onclick:function(){ endQuest(true); } }));
+    }
+    return;
+  }
+  var list = ITEMS[S.tier];
+  if (S.idx < list.length - 1){
+    off.appendChild(h("button", { cls:"btn btn-primary", type:"button", text:"Next challenge", onclick:function(){ S.idx++; renderItem(); } }));
+    if (S.tier < 3 && S.streak >= 3 && !S.jumpOffered[S.tier]){
+      S.jumpOffered[S.tier] = true;
+      var nt = S.tier + 1;
+      off.appendChild(h("p", { text:"You're moving fast. Want to jump ahead to " + MISSIONS[nt].name + "?", style:"margin-top:.7rem" }));
+      off.appendChild(h("button", { cls:"btn", type:"button", text:"Jump to " + MISSIONS[nt].name, onclick:function(){ moveUp(nt, "jumped ahead after 3 first-try answers"); } }));
+    }
+  } else {
+    S.completed[S.tier] = true;
+    addMove("Completed Tier " + S.tier + " (" + MISSIONS[S.tier].name + ")");
+    if (S.tier < 3){
+      var nx = S.tier + 1;
+      off.appendChild(h("p", { text:"Mission complete. Next up: " + MISSIONS[nx].name + "." }));
+      off.appendChild(h("div", { cls:"row" }, [
+        h("button", { cls:"btn btn-primary", type:"button", text:"Start " + MISSIONS[nx].name, onclick:function(){ moveUp(nx, "finished the previous mission"); } }),
+        h("button", { cls:"btn", type:"button", text:"See summary", onclick:openSummary })
+      ]));
+    } else {
+      off.appendChild(h("p", { text:"Mission complete. You measured, transferred, and explained precision like a lab pro." }));
+      off.appendChild(h("button", { cls:"btn btn-primary", type:"button", text:"See summary", onclick:openSummary }));
+    }
+  }
+}
+function moveUp(t, why){
+  addMove("Moved up: Tier " + S.tier + " to Tier " + t + " (" + why + ")");
+  S.tier = t; S.idx = 0; S.streak = 0; S.quest = null;
+  try { history.replaceState(null, "", "?tier=" + t); } catch(e){}
+  renderItem();
+}
+
+function offerQuest(err){
+  S.questsOffered++;
+  var off = $("offer"); off.innerHTML = "";
+  off.appendChild(h("p", { text:"This one's tricky. There's a quick side quest built around this exact skill. It looks at the same bench from a different angle." }));
+  off.appendChild(h("div", { cls:"row" }, [
+    h("button", { cls:"btn btn-primary", type:"button", text:"Start side quest", onclick:function(){ startQuest(err, "offered after 2 tries"); } }),
+    h("button", { cls:"btn", type:"button", text:"Keep trying", onclick:function(){ off.innerHTML = ""; } })
+  ]));
+}
+$("anytimeQuest").addEventListener("click", function(){
+  if (S.tier === 1 || S.quest) return;
+  S.questsChosen++;
+  startQuest(curItem().skill, "student's choice");
+});
+var questCounter = 0;
+function startQuest(err, reason){
+  var from = S.tier, qt = from - 1;
+  var route = QUEST_ROUTES[from][err] || QUEST_ROUTES[from].reading;
+  var cylId = curItem().cyl;
+  S.questsTaken++;
+  S.quest = { from:from, tier:qt, items: route.map(function(k){ return questItem(k, cylId); }), idx:0, n: ++questCounter,
+              returnIdx:S.idx, reason:reason };
+  addMove("Side quest to Tier " + qt + " from \"" + ITEMS[from][S.idx].title + "\" (" + reason + ")");
+  renderItem();
+}
+function endQuest(done){
+  var q = S.quest;
+  addMove("Returned to Tier " + q.from + (done ? " after finishing the side quest" : " before finishing the side quest"));
+  S.quest = null;
+  S.idx = q.returnIdx;
+  S.misses["m-" + S.tier + "-" + S.idx] = 0;
+  renderItem();
+  var fb = $("feedback");
+  fb.className = "feedback good"; fb.innerHTML = "";
+  fb.appendChild(h("strong", { text:"Welcome back" }));
+  fb.appendChild(h("span", { text:"Give this challenge another go with what you just practiced." }));
+}
+$("checkBtn").addEventListener("click", check);
+
+/* ---------- Summary ---------- */
+function openSummary(){
+  var b = $("sumBody"); b.innerHTML = "";
+  var answered = S.log.length, correct = S.log.filter(function(l){ return l.ok; }).length;
+  b.appendChild(h("div", { cls:"stats" }, [
+    stat(S.startTier ? "Tier " + S.startTier : "None", "Starting point"),
+    stat("Tier " + (S.quest ? S.quest.from : S.tier), "Current mission"),
+    stat(String(S.firstTry), "Correct on the first try"),
+    stat(correct + " / " + answered, "Correct checks / all checks"),
+    stat(String(S.questsTaken), "Side quests started"),
+    stat(S.questsOffered + " offered, " + S.questsChosen + " self-chosen", "How side quests began")
+  ]));
+  b.appendChild(h("h3", { text:"Tier moves" }));
+  if (!S.moves.length) b.appendChild(h("p", { cls:"muted", text:"No moves yet." }));
+  else {
+    var tm = h("table", { cls:"log" }, [ h("thead", null, [ h("tr", null, [ h("th", { text:"Time" }), h("th", { text:"Move" }) ]) ]) ]);
+    var tb = h("tbody"); S.moves.forEach(function(m){ tb.appendChild(h("tr", null, [ h("td", { text:m.time }), h("td", { text:m.text }) ])); });
+    tm.appendChild(tb);
+    b.appendChild(h("div", { cls:"tablewrap" }, [tm]));
+  }
+  b.appendChild(h("h3", { text:"Answers" }));
+  if (!S.log.length) b.appendChild(h("p", { cls:"muted", text:"No answers checked yet." }));
+  else {
+    var t = h("table", { cls:"log" }, [ h("thead", null, [ h("tr", null, [
+      h("th", { text:"Time" }), h("th", { text:"Where" }), h("th", { text:"Challenge" }), h("th", { text:"Answer" }), h("th", { text:"Result" }) ]) ]) ]);
+    var body = h("tbody");
+    S.log.forEach(function(l){
+      body.appendChild(h("tr", null, [ h("td", { text:l.time }), h("td", { text:l.where }), h("td", { text:l.item }), h("td", { text:l.answer }),
+        h("td", { cls: l.ok ? "r-good" : "r-bad", text:l.result }) ]));
+    });
+    t.appendChild(body);
+    b.appendChild(h("div", { cls:"tablewrap" }, [t]));
+  }
+  $("summary").showModal();
+}
+function stat(big, small){ return h("div", { cls:"stat" }, [ h("b", { text:big }), h("span", { text:small }) ]); }
+$("openSummary").addEventListener("click", openSummary);
+$("closeSummary").addEventListener("click", function(){ $("summary").close(); });
+
+/* ---------- Visual aids (same shapes drawn on the bench and in the magnifier) ---------- */
+function aidShapes(forLoupe){
+  var it = curItem(), shapes = [], m = modeTier();
+  if (!it) return shapes;
+  var c = G[it.cyl], v = V[it.cyl];
+  var aid = it.aid;
+  if (aid === "guide" && m >= 2 && m < 3 && v > 0.0004){
+    shapes.push({ k:"line", cls:"aid-guide", x1:c.L - 7, x2:c.R + 7, y:levelY(c, v), cyl:it.cyl });
+  }
+  if (aid === "levels"){
+    ["c100","c10"].forEach(function(id){
+      if (V[id] > 0.0004) shapes.push({ k:"line", cls:"aid-level", x1:12, x2:888, y:levelY(G[id], V[id]), cyl:id, wide:true });
+    });
+  }
+  if (aid === "arrows" && lastPour && lastPour.after && lastPour.t >= S.itemStart){
+    ["c100","c10"].forEach(function(id){
+      var g = G[id], d = lastPour.after[id] - lastPour.before[id];
+      if (Math.abs(d) > g.minor * 0.2) shapes.push({ k:"arrow", x:g.R + (id === "c100" ? 52 : 38), y:levelY(g, V[id]), up:d > 0, cyl:id });
+    });
+  }
+  if (aid === "refmark" && it.ref != null){
+    shapes.push({ k:"line", cls:"aid-mark", x1:c.L - 5, x2:c.R + 5, y:levelY(c, it.ref), cyl:it.cyl });
+  }
+  if (aid === "pairmarks" && v > 0.0004){
+    var n = Math.floor(v / c.minor + 1e-9);
+    [n, n + 1].forEach(function(k){ if (k >= 1 && k <= 100) shapes.push({ k:"line", cls:"aid-mark", x1:c.L - 5, x2:c.R + 5, y:levelY(c, k * c.minor), cyl:it.cyl }); });
+  }
+  if (aid === "band10to20") shapes.push(band(G.c100, 10, 20));
+  if (aid === "band4to5") shapes.push(band(G.c10, 4, 5));
+  if (aid === "stretch"){ shapes.push(band(G.c100, 4, 5)); shapes.push(band(G.c10, 4, 5)); }
+  return shapes;
+}
+function band(c, a, b){ return { k:"band", x1:c.L - 4, x2:c.R + 4, y1:levelY(c, b), y2:levelY(c, a), cyl:c.id }; }
+function shapeSVG(s){
+  if (s.k === "line") return '<line class="'+s.cls+'" x1="'+s.x1+'" x2="'+s.x2+'" y1="'+s.y.toFixed(2)+'" y2="'+s.y.toFixed(2)+'"/>';
+  if (s.k === "band") return '<rect class="aid-band" x="'+s.x1+'" y="'+s.y1.toFixed(2)+'" width="'+(s.x2-s.x1)+'" height="'+(s.y2-s.y1).toFixed(2)+'" rx="1.5"/>';
+  if (s.k === "arrow"){
+    var x = s.x, y = s.y, d = s.up
+      ? "M"+x+","+(y-11)+" L"+(x+8)+","+(y-1)+" L"+(x+3)+","+(y-1)+" L"+(x+3)+","+(y+9)+" L"+(x-3)+","+(y+9)+" L"+(x-3)+","+(y-1)+" L"+(x-8)+","+(y-1)+" Z"
+      : "M"+x+","+(y+11)+" L"+(x+8)+","+(y+1)+" L"+(x+3)+","+(y+1)+" L"+(x+3)+","+(y-9)+" L"+(x-3)+","+(y-9)+" L"+(x-3)+","+(y+1)+" L"+(x-8)+","+(y+1)+" Z";
+    return '<path class="aid-arrow" d="'+d+'"/>';
+  }
+  return "";
+}
+
+/* ---------- Magnifier (drawn here from the mirrored geometry) ---------- */
+var loupe = $("loupe");
+var loupeBg = el("rect", { "class":"wall", x:0, y:0, width:900, height:600 }, loupe);
+var LG = {};
+["c100","c10"].forEach(function(id){
+  var c = G[id], L = c.L, R = c.R, w = c.wall;
+  var g = el("g", { visibility: id === "c100" ? "visible" : "hidden" }, loupe);
+  el("rect", { "class":"glass-body", x:L-w, y:c.rim, width:c.inner+2*w, height:532-c.rim }, g);
+  var liq = el("path", { "class":"water", d:"" }, g);
+  var men = el("path", { "class":"meniscus", d:"" }, g);
+  for (var n = 1; n <= 100; n++){
+    var y = +(c.base - n * c.minor * c.px).toFixed(3);
+    var major = n % 10 === 0, mid = n % 5 === 0;
+    el("line", { "class":"tick" + (major ? " tick-major" : (mid ? " tick-mid" : "")), x1:L, x2:(L + c.inner * (major ? .6 : (mid ? .42 : .25))).toFixed(2), y1:y, y2:y }, g);
+    if (major){ var t = el("text", { "class":"scale-num", x:R+w+2.5, y:(y+3).toFixed(2) }, g); t.textContent = String(Math.round(n * c.minor)); }
+  }
+  el("path", { "class":"glass-line", d:"M"+(L-w)+","+c.rim+" L"+(L-w)+",532 L"+(R+w)+",532 L"+(R+w)+","+c.rim }, g);
+  var aids = el("g", null, g);
+  LG[id] = { g:g, liq:liq, men:men, aids:aids };
+});
+function setLoupe(id){
+  S.loupeCyl = id;
+  ["c100","c10"].forEach(function(k){ LG[k].g.setAttribute("visibility", k === id ? "visible" : "hidden"); });
+  document.querySelectorAll(".seg button[data-cyl]").forEach(function(b){ b.setAttribute("aria-pressed", b.dataset.cyl === id ? "true" : "false"); });
+  loupe.setAttribute("aria-label", "Close-up of the water level in the " + G[id].name);
+}
+document.querySelectorAll(".seg button[data-cyl]").forEach(function(b){
+  b.addEventListener("click", function(){ setLoupe(b.dataset.cyl); });
+});
+function liquidD(c, v){
+  if (v <= 0.0004) return ["", ""];
+  var y = levelY(c, v), hh = c.base - y, m = Math.min(c.m, hh), k = Math.min(c.inner * 0.28, 9), L = c.L, R = c.R;
+  var top = "M"+L+","+(y-m)+" Q"+L+","+y+" "+(L+k)+","+y+" L"+(R-k)+","+y+" Q"+R+","+y+" "+R+","+(y-m);
+  return ["M"+L+","+c.base+" L"+L+","+(y-m)+" Q"+L+","+y+" "+(L+k)+","+y+" L"+(R-k)+","+y+" Q"+R+","+y+" "+R+","+(y-m)+" L"+R+","+c.base+" Z", top];
+}
+
+/* ---------- Frame loop ---------- */
+var lastOverlay = "", lastLoupeAids = "";
+function loop(){
+  if (ready && !$("appWrap").hidden){
+    V = readAll();
+    var shapes = aidShapes();
+    // bench overlay
+    var html = shapes.filter(function(s){ return !cylMoving(s.cyl); }).map(shapeSVG).join("");
+    if (html !== lastOverlay){ D.getElementById("ladder-aids").innerHTML = html; lastOverlay = html; }
+    // magnifier
+    var id = S.loupeCyl, c = G[id], v = V[id], it = curItem();
+    var p = liquidD(c, v);
+    LG[id].liq.setAttribute("d", p[0]);
+    LG[id].men.setAttribute("d", p[1]);
+    var la = shapes.filter(function(s){ return s.cyl === id; }).map(function(s){
+      if (s.wide) s = { k:s.k, cls:"aid-guide", x1:c.L - 30, x2:c.R + 60, y:s.y };
+      return shapeSVG(s);
+    }).join("");
+    if (la !== lastLoupeAids){ LG[id].aids.innerHTML = la; lastLoupeAids = la; }
+    var cy;
+    if (it && it.loupeAt != null && it.cyl === id) cy = levelY(c, it.loupeAt);
+    else if (it && it.type === "abovebelow" && it.cyl === id && it.ref != null && v <= 0.0004) cy = levelY(c, it.ref);
+    else cy = v > 0.0004 ? levelY(c, v) : c.base - 12;
+    var LW = 72;
+    var x0 = id === "c10" ? 565 - LW/2 : 336 - LW/2;
+    loupe.setAttribute("viewBox", x0 + " " + (cy - LW/2) + " " + LW + " " + LW);
+    if (it && it.type === "abovebelow"){
+      var pt = promptFor(it);
+      if ($("itemPrompt").textContent !== pt) $("itemPrompt").textContent = pt;
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ---------- Deep link: ?tier=1|2|3 launches directly ---------- */
+var qp = new URLSearchParams(location.search).get("tier");
+if (qp === "1" || qp === "2" || qp === "3") startTier(+qp, true);
+})();
+</script>
+</body>
+</html>
