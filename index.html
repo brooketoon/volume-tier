@@ -9,9 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <!--
   Tier layer for the Measuring Volume bench sandbox.
-  This page does NOT modify index.html. It loads index.html in a same-origin
+  This page does NOT modify bench.html. It loads bench.html in a same-origin
   frame, reads the water levels from its drawing, and adds overlays at runtime.
-  Keep this file in the same folder as index.html.
+  Keep this file in the same folder as bench.html.
 -->
 <style>
 :root{
@@ -170,7 +170,7 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
   <main class="app">
     <section aria-label="Lab bench">
       <iframe id="bench" title="Lab bench: pour water between graduated cylinders"></iframe>
-      <p class="loadnote" id="loadNote" hidden>The lab bench couldn't be connected. Keep this file in the same folder as index.html and open it from a web address (for example, GitHub Pages), not straight from your computer's files.</p>
+      <p class="loadnote" id="loadNote" hidden>The lab bench couldn't be connected. Keep this file in the same folder as bench.html and open it from a web address (for example, GitHub Pages), not straight from your computer's files.</p>
     </section>
 
     <aside class="side">
@@ -214,7 +214,7 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
   </div>
 </dialog>
 
-<!-- Preview builds put the baseline page here. The GitHub version leaves it empty and loads index.html. -->
+<!-- Preview builds put the baseline page here. The GitHub version leaves it empty and loads bench.html. -->
 <script type="application/json" id="baseline-src"></script>
 
 <script>
@@ -255,12 +255,12 @@ function markStr(c, v){ return (Math.round(v / c.minor) * c.minor).toFixed(c.dec
 
 /* ---------- Connect to the baseline ---------- */
 /*
-  Where the bench lives. "index.html" means "the file right next to this one".
+  Where the bench lives. "bench.html" means "the file right next to this one".
   If the bench is in a different repo, put its full address here, for example:
   var BENCH_URL = "https://btoon-maker.github.io/Measuring-Volume-Sandbox/";
   You can also add ?bench=<address> to this page's URL.
 */
-var BENCH_URL = "index.html";
+var BENCH_URL = "bench.html";
 var frame = $("bench"), D = null, ready = false;
 var V = { c100:0, c10:0 };
 var lastPour = null;
@@ -278,7 +278,7 @@ var benchUrlUsed = "";
   var url = qp || BENCH_URL;
   try { benchUrlUsed = new URL(url, location.href).href; } catch(e){ benchUrlUsed = url; }
   if (location.protocol === "file:"){
-    benchProblem("This page was opened straight from your computer's files, and browsers block the lab bench from connecting that way. Open it from its web address instead (for example, your GitHub Pages link ending in /ladder.html).");
+    benchProblem("This page was opened straight from your computer's files, and browsers block the lab bench from connecting that way. Open it from its web address instead (for example, your GitHub Pages link).");
     return;
   }
   frame.src = url;
@@ -293,16 +293,17 @@ frame.addEventListener("load", function(){
     D = frame.contentDocument;
   } catch(e){ D = null; }
   if (!D){
-    benchProblem("The lab bench at " + benchUrlUsed + " is on a different website, so this page isn't allowed to connect to it. Put ladder.html on the same site as the bench (any btoon-maker.github.io address works).");
+    benchProblem("The lab bench at " + benchUrlUsed + " is on a different website, so this page isn't allowed to connect to it. Put this page on the same site as the bench (any btoon-maker.github.io address works).");
     return;
   }
   if (!D.getElementById("stage")){
-    benchProblem("A page loaded from " + benchUrlUsed + ", but it isn't the lab bench (it may be GitHub's \"page not found\"). Put ladder.html in the same folder as the bench's index.html, or set BENCH_URL near the top of the script to the bench's address.");
+    benchProblem("A page loaded from " + benchUrlUsed + ", but it isn't the lab bench (it may be GitHub's \"page not found\"). Put this page in the same folder as bench.html, or set BENCH_URL near the top of the script to the bench's address.");
     return;
   }
   var st = D.createElement("style");
   st.textContent =
     ".top,.skip{display:none !important}" +
+    "html,body{overflow:hidden !important}" +
     ".layout{padding:0 !important;max-width:none !important}" +
     "body{background:transparent !important}" +
     ".aid-guide{stroke:var(--safety);stroke-width:.9;stroke-dasharray:3 2}" +
@@ -319,6 +320,8 @@ frame.addEventListener("load", function(){
   // Keep the frame as tall as its content
   var fit = function(){ frame.style.height = (D.documentElement.scrollHeight + 4) + "px"; };
   fit();
+  try { D.fonts.ready.then(fit); } catch(e){}
+  setTimeout(fit, 800);
   try { new (frame.contentWindow.ResizeObserver)(fit).observe(D.body); } catch(e){ window.addEventListener("resize", fit); }
 
   // Watch the pour button to learn what moved during each pour
@@ -419,7 +422,7 @@ var ITEMS = {
         return [0];
       },
       ok:"Yes. Water leaves one container and shows up in the other. The arrows show which way each level moved.",
-      miss:"Watch the arrows next to each cylinder after you pour. They point the way each level moved.",
+      miss:"Watch both water levels while you pour. Which one rises? Which one drops?",
       hint2:"Water poured out of a container makes its level drop. Water poured in makes a level rise."
     }),
     choice({ id:"t1-width", title:"Same water, different look", cyl:"c100", skill:"width", aid:"levels",
@@ -442,7 +445,7 @@ var ITEMS = {
         return [0];
       },
       ok:"Yes. In the narrow 10 mL cylinder a drop has less room to spread, so the level moves farther. That makes small changes easier to see.",
-      miss:"Watch the arrows after each set of drops. The narrow cylinder gives a drop less room to spread out.",
+      miss:"Watch each level closely while the drops fall. The narrow cylinder gives a drop less room to spread out.",
       hint2:"Try 5 drops into the 10 mL cylinder, then 5 into the 100 mL cylinder, and watch each level."
     }),
     { id:"t1-choose", type:"multi", title:"Pick the right tool", cyl:"c10", skill:"choose", aid:"none",
@@ -601,7 +604,7 @@ $("resetBench").addEventListener("click", function(){
 /* ---------- Rendering an item ---------- */
 function renderItem(){
   var it = curItem();
-  S.itemStart = Date.now(); S.answered = false;
+  S.itemStart = Date.now(); S.answered = false; S.solved = false;
   $("missionName").textContent = MISSIONS[S.tier].name;
   $("missionSub").textContent = MISSIONS[S.tier].desc;
 
@@ -782,6 +785,7 @@ function show(res, answerText){
     var first = !S.misses[key];
     if (first){ S.firstTry++; S.streak++; } else S.streak = 0;
     fb.className = "feedback good";
+    S.solved = true;
     fb.appendChild(h("strong", { text: res.title || "Got it" }));
     fb.appendChild(h("span", { text:res.msg }));
     $("checkBtn").hidden = true;
@@ -933,7 +937,7 @@ function aidShapes(forLoupe){
       if (V[id] > 0.0004) shapes.push({ k:"line", cls:"aid-level", x1:12, x2:888, y:levelY(G[id], V[id]), cyl:id, wide:true });
     });
   }
-  if (aid === "arrows" && lastPour && lastPour.after && lastPour.t >= S.itemStart){
+  if (aid === "arrows" && S.solved && lastPour && lastPour.after && lastPour.t >= S.itemStart){
     ["c100","c10"].forEach(function(id){
       var g = G[id], d = lastPour.after[id] - lastPour.before[id];
       if (Math.abs(d) > g.minor * 0.2) shapes.push({ k:"arrow", x:g.R + (id === "c100" ? 52 : 38), y:levelY(g, V[id]), up:d > 0, cyl:id });
