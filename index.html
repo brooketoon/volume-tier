@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Measuring Volume: Bench Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#EEF2F4; --wall:#DDE6EB; --tile:#C9D6DD; --panel:#FFFFFF;
+  --ink:#1B2730; --muted:#52636E; --line:#C3CFD6;
+  --bench:#2E3A35; --bench-edge:#46564F; --plate:#E3ECE8;
+  --glass-fill:rgba(255,255,255,.55); --glass-stroke:#6F8796;
+  --water:#2A74B5; --water-edge:#174A78; --tick:#1F2C35;
+  --safety:#D99A00; --focus:#D99A00;
+  --good:#1D7349; --warn:#8C5300; --bad:#A8261E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#12181C; --wall:#1A2329; --tile:#233039; --panel:#1C252B;
+    --ink:#E6EDF1; --muted:#9FB1BC; --line:#34444E;
+    --bench:#25302B; --bench-edge:#3A4943; --plate:#C9D8D1;
+    --glass-fill:rgba(170,205,225,.08); --glass-stroke:#9DB5C3;
+    --water:#3F93D6; --water-edge:#A7D2F2; --tick:#D8E4EB;
+    --safety:#F2BD2C; --focus:#F2BD2C;
+    --good:#5CC48F; --warn:#E8AE55; --bad:#FF8F85;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#12181C; --wall:#1A2329; --tile:#233039; --panel:#1C252B;
+  --ink:#E6EDF1; --muted:#9FB1BC; --line:#34444E;
+  --bench:#25302B; --bench-edge:#3A4943; --plate:#C9D8D1;
+  --glass-fill:rgba(170,205,225,.08); --glass-stroke:#9DB5C3;
+  --water:#3F93D6; --water-edge:#A7D2F2; --tick:#D8E4EB;
+  --safety:#F2BD2C; --focus:#F2BD2C;
+  --good:#5CC48F; --warn:#E8AE55; --bad:#FF8F85;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:1.0625rem;line-height:1.5}
+.skip{position:absolute;left:-999px;top:0;background:var(--panel);color:var(--ink);padding:.5rem 1rem;z-index:10}
+.skip:focus{left:1rem;top:1rem}
+.top{max-width:1100px;margin:0 auto;padding:1.4rem 1.25rem .6rem;display:flex;gap:1rem;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:clamp(1.5rem,2.6vw,2.05rem);line-height:1.12;margin:0;letter-spacing:-.01em}
+.top p{margin:.35rem 0 0;color:var(--muted);max-width:62ch}
+.layout{max-width:1100px;margin:0 auto;padding:.5rem 1.25rem 2.5rem;display:grid;grid-template-columns:minmax(0,1fr);gap:1.25rem;align-items:start}
+@media (max-width:980px){.layout{grid-template-columns:1fr}}
+#stage{width:100%;height:auto;display:block;border-radius:12px;background:var(--wall);touch-action:manipulation}
+.controls{display:flex;flex-wrap:wrap;gap:.8rem 1.1rem;align-items:flex-end;margin-top:1rem}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{font-weight:700;font-size:.9rem;margin:0 0 .3rem;padding:0}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg label{position:relative;display:block}
+.seg input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.seg span{display:block;padding:.45rem .7rem;font-size:.95rem;border-right:1px solid var(--line);white-space:nowrap}
+.seg label:last-child span{border-right:0}
+.seg input:checked + span{background:var(--water);color:#fff;font-weight:700}
+.seg input:focus-visible + span{outline:3px solid var(--focus);outline-offset:-3px}
+.seg input:disabled{cursor:not-allowed}
+.seg input:disabled + span{opacity:.45}
+.pour{appearance:none;border:0;border-radius:999px;padding:.8rem 1.7rem;font:inherit;font-weight:700;font-size:1.05rem;background:var(--bench);color:#fff;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;box-shadow:inset 0 -3px 0 rgba(0,0,0,.28)}
+.pour[aria-pressed="true"]{background:var(--water)}
+.pour:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.hint{color:var(--muted);font-size:.92rem;margin:.55rem 0 0;min-height:1.4em}
+.status{margin:.5rem 0 0;padding:.6rem .8rem;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-size:.97rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+.status p{margin:0;flex:1 1 20ch}
+.btn{appearance:none;font:inherit;font-size:.95rem;padding:.45rem .9rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--glass-stroke)}
+.btn-primary{background:var(--water);border-color:var(--water);color:#fff;font-weight:700}
+.side{display:flex;flex-direction:column;gap:1rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem 1.05rem}
+.card h2{font-size:1.12rem;margin:0 0 .55rem}
+.card p{margin:.3rem 0}
+.loupe{width:min(100%,290px);aspect-ratio:1/1;margin:.8rem auto .6rem;border-radius:50%;overflow:hidden;border:11px solid var(--bench);box-shadow:0 0 0 2px var(--line),0 10px 24px rgba(0,0,0,.18);position:relative;background:var(--wall)}
+.loupe svg{width:100%;height:100%;display:block}
+.loupe::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 24%,rgba(255,255,255,.32),rgba(255,255,255,0) 42%);pointer-events:none}
+.check{display:flex;gap:.5rem;align-items:center;font-size:.95rem;margin:.25rem 0}
+.check input{width:1.1rem;height:1.1rem;accent-color:var(--water);margin:0}
+.describe{background:var(--wall);border-radius:8px;padding:.55rem .75rem;margin:.5rem 0 0;font-size:.95rem}
+.field-label{display:block;font-weight:700;font-size:.95rem;margin-top:.2rem}
+.field{display:flex;align-items:center;gap:.45rem;margin:.35rem 0 .7rem}
+.field input{font:inherit;font-size:1.3rem;width:8ch;padding:.35rem .55rem;border:2px solid var(--line);border-radius:8px;background:var(--page);color:var(--ink);font-variant-numeric:tabular-nums}
+.field input:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+.row{display:flex;gap:.5rem;flex-wrap:wrap}
+.feedback{margin:.75rem 0 0;padding:.55rem .75rem;border-left:4px solid var(--line);background:var(--page);border-radius:4px;font-size:.95rem}
+.feedback:empty{display:none}
+.feedback strong{display:block}
+.feedback.good{border-color:var(--good)} .feedback.good strong{color:var(--good)}
+.feedback.warn{border-color:var(--warn)} .feedback.warn strong{color:var(--warn)}
+.feedback.bad{border-color:var(--bad)} .feedback.bad strong{color:var(--bad)}
+.reveal{font-size:.9rem;color:var(--muted);margin:.6rem 0 0}
+details{margin:.2rem 0 .5rem;font-size:.93rem}
+summary{cursor:pointer;color:var(--muted)}
+.targets{display:flex;flex-direction:column;gap:.35rem;margin:.2rem 0 .7rem}
+.targets label{display:flex;gap:.55rem;align-items:flex-start;font-size:.95rem;padding:.35rem .45rem;border-radius:6px;cursor:pointer}
+.targets label:has(input:checked){background:var(--page)}
+.targets input{margin:.28rem 0 0;accent-color:var(--water)}
+table.log{width:100%;border-collapse:collapse;font-size:.92rem}
+.log th,.log td{text-align:left;padding:.35rem .3rem;border-bottom:1px solid var(--line);vertical-align:top}
+.log th{font-size:.85rem;color:var(--muted)}
+.log .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.r-good{color:var(--good);font-weight:700} .r-warn{color:var(--warn);font-weight:700} .r-bad{color:var(--bad);font-weight:700}
+.empty{color:var(--muted);font-size:.92rem;margin:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* SVG */
+svg text{font-family:inherit}
+.wall{fill:var(--wall)}
+.tile{fill:none;stroke:var(--tile);stroke-width:1}
+.bench{fill:var(--bench)}
+.bench-edge{fill:var(--bench-edge)}
+.plate{fill:var(--plate);font-size:15px;font-weight:700;text-anchor:middle}
+.glass-body{fill:var(--glass-fill)}
+.glass-line{fill:none;stroke:var(--glass-stroke);stroke-width:1.6;stroke-linejoin:round}
+.glass-shine{fill:none;stroke:#fff;stroke-opacity:.5;stroke-width:1.4;stroke-linecap:round}
+.water{fill:var(--water);fill-opacity:.78}
+.meniscus{fill:none;stroke:var(--water-edge);stroke-width:.7}
+.tick{stroke:var(--tick);stroke-width:.5}
+.tick-mid{stroke-width:.6}
+.tick-major{stroke-width:.8}
+.scale-num{fill:var(--tick);font-size:8.5px;font-weight:700}
+.scale-unit{fill:var(--tick);font-size:6.5px}
+.stream{fill:none;stroke:var(--water);stroke-opacity:.85;stroke-linecap:round}
+.drop{fill:var(--water)}
+.puddle{fill:var(--water);fill-opacity:.45}
+.hit{fill:transparent}
+.mover{transform-box:view-box;transition:transform .42s cubic-bezier(.3,.7,.3,1)}
+.mover.pickable{cursor:pointer}
+.mover.pickable:focus{outline:none}
+.sel-ring{fill:none;stroke:var(--safety);stroke-width:2.2;visibility:hidden}
+.mover.is-selected .sel-ring{visibility:visible}
+.mover.pickable:focus-visible .sel-ring{visibility:visible;stroke:var(--focus);stroke-width:3.2;stroke-dasharray:6 4}
+.tip-liq{visibility:hidden}
+.mover.tipped > .tip-liq{visibility:visible}
+.mover.tipped > g .in-liq{visibility:hidden}
+.readline{stroke:var(--safety);stroke-width:.35;stroke-dasharray:1.6 1}
+@media (prefers-reduced-motion:reduce){.mover{transition:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the bench</a>
+<header class="top">
+  <div>
+    <h1>Measuring volume: bench sandbox</h1>
+    <p>Pour water between two graduated cylinders, and watch the levels change.</p>
+  </div>
+  <button class="btn" id="reset" type="button">Reset bench</button>
+</header>
+
+<main class="layout" id="main">
+  <section aria-labelledby="bench-h">
+    <h2 id="bench-h" class="sr">Lab bench</h2>
+    <svg id="stage" viewBox="0 0 900 600" role="group" aria-label="Lab bench with a stock water beaker, a 100 mL graduated cylinder, a 10 mL graduated cylinder, and a waste beaker."></svg>
+
+    <div class="controls">
+      <fieldset>
+        <legend>Pour from</legend>
+        <div class="seg">
+          <label><input type="radio" name="from" value="stock" checked><span>Stock water</span></label>
+          <label><input type="radio" name="from" value="c100"><span>100 mL</span></label>
+          <label><input type="radio" name="from" value="c10"><span>10 mL</span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Pour into</legend>
+        <div class="seg">
+          <label><input type="radio" name="to" value="c100" checked><span>100 mL</span></label>
+          <label><input type="radio" name="to" value="c10"><span>10 mL</span></label>
+          <label><input type="radio" name="to" value="waste"><span>Waste</span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Speed</legend>
+        <div class="seg">
+          <label><input type="radio" name="rate" value="fast"><span>Fast</span></label>
+          <label><input type="radio" name="rate" value="steady" checked><span>Steady</span></label>
+          <label><input type="radio" name="rate" value="slow"><span>Slow</span></label>
+          <label><input type="radio" name="rate" value="drops"><span>Drops</span></label>
+        </div>
+      </fieldset>
+      <button class="pour" id="pour" type="button" aria-pressed="false" aria-describedby="pourHint">Hold to pour</button>
+    </div>
+    <p class="hint" id="pourHint">Press and hold to pour. Release to stop.</p>
+
+    <div class="status">
+      <p id="status" role="status" aria-live="polite">Both cylinders are empty. Start by pouring stock water into one.</p>
+      <button class="btn" id="wipe" type="button" hidden>Wipe up spill</button>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+"use strict";
+var NS = "http://www.w3.org/2000/svg";
+var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var MOVE_MS = reduced ? 0 : 430;
+var BENCH_Y = 540;
+var LW = 72; // loupe window size in stage units
+var RATES = { fast: 10, steady: 2, slow: 0.4, drops: 0 };
+var DROP_ML = 0.05;
+
+function el(tag, attrs, parent){
+  var e = document.createElementNS(NS, tag);
+  if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function $(id){ return document.getElementById(id); }
+function radioVal(name){ var r = document.querySelector('input[name="'+name+'"]:checked'); return r ? r.value : null; }
+
+function mkCyl(o){
+  var wall = 2.5;
+  o.kind = "cyl"; o.vol = 0; o.wall = wall;
+  o.L = o.cx - o.inner/2; o.R = o.cx + o.inner/2;
+  o.half = o.inner/2 + wall;
+  o.cap = (o.base - o.rim) / o.px;
+  o.lipL = { x: o.L - wall - 3, y: o.rim - 1 };
+  o.lipR = { x: o.R + wall + 3, y: o.rim - 1 };
+  o.baseL = { x: o.L - 26, y: BENCH_Y };
+  o.baseR = { x: o.R + 26, y: BENCH_Y };
+  o.tol = o.minor * 0.3;
+  o.topMark = 100 * o.minor;
+  return o;
+}
+
+var C = {
+  stock: { id:"stock", kind:"stock", name:"stock water beaker", cx:105, half:65, rim:400, base:530,
+           lipL:{x:40,y:400}, lipR:{x:170,y:400}, baseL:{x:40,y:530}, baseR:{x:170,y:530} },
+  c100: mkCyl({ id:"c100", name:"100 mL cylinder", short:"100 mL", cx:330, inner:50, rim:149, base:530, px:3.4, minor:1, dec:1, m:3,
+                minorWord:"1 mL", placeWord:"tenths place (0.1 mL)" }),
+  c10:  mkCyl({ id:"c10", name:"10 mL cylinder", short:"10 mL", cx:560, inner:30, rim:185, base:530, px:30, minor:0.1, dec:2, m:2.2,
+                minorWord:"0.1 mL", placeWord:"hundredths place (0.01 mL)" }),
+  waste:{ id:"waste", kind:"waste", name:"waste beaker", cx:790, half:60, rim:440, base:530, vol:0 }
+};
+var spill = 0, spillAt = null, spilledThisPour = false;
+
+/* ---------- Build the stage ---------- */
+var stage = $("stage");
+var defs = el("defs", null, stage);
+var pat = el("pattern", { id:"tiles", width:60, height:60, patternUnits:"userSpaceOnUse" }, defs);
+el("path", { d:"M60 0H0V60", "class":"tile" }, pat);
+el("rect", { x:0, y:0, width:900, height:600, "class":"wall" }, stage);
+el("rect", { x:0, y:0, width:900, height:540, fill:"url(#tiles)" }, stage);
+el("rect", { x:0, y:540, width:900, height:60, "class":"bench" }, stage);
+el("rect", { x:0, y:540, width:900, height:3, "class":"bench-edge" }, stage);
+[["Stock water",105],["100 mL cylinder",330],["10 mL cylinder",560],["Waste",790]].forEach(function(p){
+  var t = el("text", { x:p[1], y:578, "class":"plate" }, stage); t.textContent = p[0];
+});
+var puddle = el("ellipse", { cx:0, cy:543, rx:0, ry:0, "class":"puddle" }, stage);
+var layer = el("g", null, stage);
+var stream = el("path", { "class":"stream", d:"", visibility:"hidden" }, stage);
+var drop = el("circle", { "class":"drop", r:1.9, cx:0, cy:0, visibility:"hidden" }, stage);
+
+function buildBeaker(c, id, waterId, waterY){
+  var x1 = c.cx - c.half, x2 = c.cx + c.half;
+  var mv = el("g", { "class":"mover", id:"mv-"+id }, layer);
+  var g = el("g", { id:"g-"+id }, mv);
+  el("path", { "class":"glass-body", d:"M"+x1+","+c.rim+" L"+x1+",522 Q"+x1+",530 "+(x1+8)+",530 L"+(x2-8)+",530 Q"+x2+",530 "+x2+",522 L"+x2+","+c.rim+" Z" }, g);
+  var w = el("rect", { "class":"water in-liq", id:waterId, x:x1+2, y:waterY, width:(x2-x1-4), height:Math.max(0, 528-waterY), rx:3 }, g);
+  el("path", { "class":"glass-line", d:"M"+(x1-5)+","+(c.rim-3)+" Q"+x1+","+(c.rim-2)+" "+x1+","+(c.rim+4)+" L"+x1+",522 Q"+x1+",530 "+(x1+8)+",530 L"+(x2-8)+",530 Q"+x2+",530 "+x2+",522 L"+x2+","+(c.rim+4)+" Q"+x2+","+(c.rim-2)+" "+(x2+5)+","+(c.rim-3) }, g);
+  el("line", { "class":"glass-shine", x1:x1+7, x2:x1+7, y1:c.rim+14, y2:515 }, g);
+  c.tipLiq = el("rect", { "class":"water tip-liq", x:x1+2, y:c.rim+2, width:(x2-x1-4), height:Math.max(0, 528-waterY) }, mv);
+  return w;
+}
+buildBeaker(C.stock, "stock", "stockLiq", 438);
+var wasteLiq = buildBeaker(C.waste, "waste", "wasteLiq", 528);
+
+function buildCyl(c){
+  var L = c.L, R = c.R, wl = c.wall;
+  var mv = el("g", { "class":"mover", id:"mv-"+c.id }, layer);
+  var g = el("g", { id:"g-"+c.id }, mv);
+  el("rect", { "class":"hit", x:L-30, y:c.rim-12, width:c.inner+72, height:BENCH_Y-c.rim+12 }, g);
+  el("polygon", { "class":"glass-body", points:(L-18)+",532 "+(R+18)+",532 "+(R+26)+",540 "+(L-26)+",540" }, g);
+  el("polygon", { "class":"glass-line", points:(L-18)+",532 "+(R+18)+",532 "+(R+26)+",540 "+(L-26)+",540" }, g);
+  el("rect", { "class":"glass-body", x:L-wl, y:c.rim, width:c.inner+2*wl, height:532-c.rim }, g);
+  c.liq = el("path", { "class":"water in-liq", d:"" }, g);
+  c.men = el("path", { "class":"meniscus in-liq", d:"" }, g);
+  var ticks = el("g", null, g);
+  for (var n = 1; n <= 100; n++){
+    var y = +(c.base - n * c.minor * c.px).toFixed(3);
+    var major = n % 10 === 0, mid = n % 5 === 0;
+    var len = major ? 0.6 : (mid ? 0.42 : 0.25);
+    el("line", { "class":"tick" + (major ? " tick-major" : (mid ? " tick-mid" : "")), x1:L, x2:(L + c.inner*len).toFixed(2), y1:y, y2:y }, ticks);
+    if (major){
+      var t = el("text", { "class":"scale-num", x:R+wl+2.5, y:(y+3).toFixed(2) }, ticks);
+      t.textContent = String(Math.round(n * c.minor));
+    }
+  }
+  var u = el("text", { "class":"scale-unit", x:R+wl+2.5, y:c.rim+11 }, g); u.textContent = "mL";
+  el("path", { "class":"glass-line", d:"M"+(L-wl-3)+","+(c.rim-2)+" Q"+(L-wl)+","+(c.rim-1)+" "+(L-wl)+","+(c.rim+3)+" L"+(L-wl)+",532 L"+(R+wl)+",532 L"+(R+wl)+","+(c.rim+3)+" Q"+(R+wl)+","+(c.rim-1)+" "+(R+wl+3)+","+(c.rim-2) }, g);
+  el("line", { "class":"glass-shine", x1:L+3, x2:L+3, y1:c.rim+12, y2:c.base-12 }, g);
+  c.tipLiq = el("rect", { "class":"water tip-liq", x:L, y:c.rim+3, width:c.inner, height:0 }, mv);
+  mv.addEventListener("keydown", function(e){
+    if (e.key === "Enter" || e.key === " "){ e.preventDefault(); setSel(c.id, true); }
+  });
+}
+buildCyl(C.c100);
+buildCyl(C.c10);
+
+/* ---------- Geometry helpers ---------- */
+function levelY(c){ return c.base - c.vol * c.px; }
+function wasteY(){ return 528 - Math.min(80, C.waste.vol * 0.3); }
+function surfaceY(t){
+  if (t.kind === "cyl") return t.vol > 0 ? levelY(t) : t.base;
+  if (t.kind === "waste") return wasteY();
+  return t.base;
+}
+function liquidPaths(c){
+  if (c.vol <= 0.0004) return ["", ""];
+  var y = levelY(c), h = c.base - y;
+  var m = Math.min(c.m, h), k = Math.min(c.inner * 0.28, 9);
+  var L = c.L, R = c.R;
+  var top = "M"+L+","+(y-m)+" Q"+L+","+y+" "+(L+k)+","+y+" L"+(R-k)+","+y+" Q"+R+","+y+" "+R+","+(y-m);
+  var fill = "M"+L+","+c.base+" L"+L+","+(y-m)+" Q"+L+","+y+" "+(L+k)+","+y+" L"+(R-k)+","+y+" Q"+R+","+y+" "+R+","+(y-m)+" L"+R+","+c.base+" Z";
+  return [fill, top];
+}
+function rot(x, y, deg){
+  var a = deg * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+  return { x: x*cs - y*sn, y: x*sn + y*cs };
+}
+function computeMove(s, t){
+  var dir = t.cx > s.cx ? 1 : -1;
+  var lip = dir > 0 ? s.lipR : s.lipL;
+  var farBase = dir > 0 ? s.baseL : s.baseR;
+  var farLip = dir > 0 ? s.lipL : s.lipR;
+  var ang = dir * (s.kind === "stock" ? 95 : 100);
+  var rb = rot(farBase.x - lip.x, farBase.y - lip.y, ang);
+  var rt = rot(farLip.x - lip.x, farLip.y - lip.y, ang);
+  var destX = t.cx - dir * (t.half + 10);
+  var destY = Math.min(t.rim - 24, 536 - rb.y);
+  destY = Math.max(destY, 8 - Math.min(rt.y, rb.y));
+  return { lip: lip, dir: dir, ang: ang, dx: destX - lip.x, dy: destY - lip.y, dest: { x: destX, y: destY } };
+}
+
+/* ---------- Describing and reading ---------- */
+function markText(c, v){ return v.toFixed(c.dec - 1) + " mL"; }
+function describeLevel(c){
+  if (c.vol <= 0.0004) return "The " + c.name + " is empty.";
+  var n = c.vol / c.minor;
+  if (n > 100.08) return "In the " + c.name + ", the water is above the highest mark, so this scale can't give a supported reading.";
+  if (n < 0.92) return "In the " + c.name + ", the bottom of the curve is below the lowest mark.";
+  var lo = Math.floor(n + 1e-9), frac = n - lo;
+  if (frac < 0.08) return "In the " + c.name + ", the bottom of the curve sits right at the " + markText(c, lo * c.minor) + " mark.";
+  if (frac > 0.92) return "In the " + c.name + ", the bottom of the curve sits right at the " + markText(c, (lo + 1) * c.minor) + " mark.";
+  return "In the " + c.name + ", the bottom of the curve sits between the " + markText(c, lo * c.minor).replace(" mL","") + " and " + markText(c, (lo + 1) * c.minor) + " marks.";
+}
+
+/* ---------- Rendering ---------- */
+function render(){
+  ["c100","c10"].forEach(function(id){
+    var c = C[id], p = liquidPaths(c);
+    c.liq.setAttribute("d", p[0]);
+    c.men.setAttribute("d", p[1]);
+    c.tipLiq.setAttribute("height", Math.min(c.vol * c.px, c.base - c.rim - 3));
+  });
+  var wy = wasteY();
+  wasteLiq.setAttribute("y", wy);
+  wasteLiq.setAttribute("height", Math.max(0, 528 - wy));
+  if (spill > 0.0004 && spillAt){
+    puddle.setAttribute("cx", spillAt.cx + 18);
+    puddle.setAttribute("rx", Math.min(90, 10 + spill * 4));
+    puddle.setAttribute("ry", Math.min(5, 2 + spill * 0.4));
+  } else {
+    puddle.setAttribute("rx", 0); puddle.setAttribute("ry", 0);
+  }
+}
+
+
+/* ---------- Pouring ---------- */
+var S = { held:false, phase:"idle", src:null, dst:null, rate:"steady", move:null, raf:0, timer:0, dropTimer:0, last:0, node:null };
+var pourBtn = $("pour");
+
+function setStatus(msg){ $("status").textContent = msg; }
+function updatePourAvailability(){
+  if (S.held) return;
+  var same = radioVal("from") === radioVal("to");
+  pourBtn.disabled = same;
+  $("pourHint").textContent = same ? "Pick a different container to pour into." : "Press and hold to pour. Release to stop.";
+}
+document.querySelectorAll('input[name="from"],input[name="to"]').forEach(function(r){
+  r.addEventListener("change", updatePourAvailability);
+});
+function lockControls(on){
+  document.querySelectorAll('input[name="from"],input[name="to"],input[name="rate"]').forEach(function(r){ r.disabled = on; });
+}
+
+function transfer(a){
+  var s = S.src, t = S.dst;
+  if (s.kind === "cyl"){
+    a = Math.min(a, s.vol);
+    s.vol -= a;
+    if (s.vol < 1e-9) s.vol = 0;
+  }
+  if (a <= 0) return 0;
+  t.vol += a;
+  if (t.kind === "cyl" && t.vol > t.cap){
+    spill += t.vol - t.cap;
+    t.vol = t.cap;
+    spillAt = t;
+    spilledThisPour = true;
+  }
+  return a;
+}
+
+function drawStream(on){
+  if (!on){ stream.setAttribute("visibility","hidden"); return; }
+  var m = S.move, t = S.dst, d = m.dest, dir = m.dir;
+  var sy = surfaceY(t);
+  var mouthY = t.rim + 2;
+  var path = "M"+d.x+","+d.y+
+             " C"+(d.x + dir*9)+","+(d.y + 1)+" "+(t.cx - dir*3)+","+(d.y + 6)+" "+t.cx+","+Math.min(mouthY, sy)+
+             " L"+t.cx+","+sy;
+  stream.setAttribute("d", path);
+  stream.setAttribute("stroke-width", S.rate === "fast" ? 5 : (S.rate === "steady" ? 3 : 1.4));
+  stream.setAttribute("visibility","visible");
+}
+
+function tick(now){
+  if (S.phase !== "flowing") return;
+  var dt = Math.min(0.05, (now - S.last) / 1000);
+  S.last = now;
+  var moved = transfer(RATES[S.rate] * dt);
+  drawStream(moved > 0);
+  render();
+  S.raf = requestAnimationFrame(tick);
+}
+
+function emitDrop(){
+  if (S.phase !== "flowing") return;
+  if (S.src.kind === "cyl" && S.src.vol <= 0) return;
+  var src = S.src, dst = S.dst, move = S.move;
+  var start = null, x = dst.cx, y0 = move.dest.y + 2;
+  var dur = reduced ? 1 : 260;
+  drop.setAttribute("visibility","visible");
+  function step(ts){
+    if (start === null) start = ts;
+    var p = Math.min(1, (ts - start) / dur);
+    var y1 = surfaceY(dst);
+    var px = move.dest.x + (x - move.dest.x) * Math.min(1, p * 2.2);
+    drop.setAttribute("cx", px);
+    drop.setAttribute("cy", y0 + (y1 - y0) * p * p);
+    if (p < 1){ requestAnimationFrame(step); return; }
+    drop.setAttribute("visibility","hidden");
+    var keepSrc = S.src, keepDst = S.dst;
+    S.src = src; S.dst = dst;
+    transfer(DROP_ML);
+    S.src = keepSrc; S.dst = keepDst;
+    render();
+    if (!S.held) summarize(src, dst);
+  }
+  requestAnimationFrame(step);
+}
+
+function startPour(){
+  if (S.held || pourBtn.disabled) return;
+  var f = radioVal("from"), t = radioVal("to");
+  if (f === t) return;
+  clearTimeout(S.timer);
+  S.held = true;
+  S.src = C[f]; S.dst = C[t]; S.rate = radioVal("rate");
+  spilledThisPour = false;
+  pourBtn.setAttribute("aria-pressed","true");
+  pourBtn.textContent = "Pouring…";
+  lockControls(true);
+  if (S.src.kind === "cyl" && S.src.vol <= 0){
+    setStatus("The " + S.src.name + " is empty. Fill it from the stock water first.");
+  }
+  var mv = computeMove(S.src, S.dst);
+  S.move = mv;
+  var node = $("mv-" + S.src.id);
+  if (S.node && S.node !== node) S.node.classList.remove("tipped");
+  S.node = node;
+  if (layer.lastChild !== node){
+    node.style.transition = "none";
+    node.style.transform = "";
+    layer.appendChild(node);
+    node.getBoundingClientRect();
+    node.style.transition = "";
+  }
+  node.style.transformOrigin = mv.lip.x + "px " + mv.lip.y + "px";
+  node.style.transform = "translate(" + mv.dx + "px," + mv.dy + "px) rotate(" + mv.ang + "deg)";
+  S.phase = "moving";
+  S.timer = setTimeout(beginFlow, MOVE_MS);
+}
+
+function beginFlow(){
+  if (!S.held) return;
+  S.phase = "flowing";
+  S.node.classList.add("tipped");
+  if (S.rate === "drops"){
+    emitDrop();
+    S.dropTimer = setInterval(emitDrop, 340);
+  } else {
+    S.last = performance.now();
+    S.raf = requestAnimationFrame(tick);
+  }
+}
+
+function stopPour(){
+  if (!S.held) return;
+  S.held = false;
+  var src = S.src, dst = S.dst, wasDrops = S.rate === "drops";
+  cancelAnimationFrame(S.raf);
+  clearTimeout(S.timer);
+  clearInterval(S.dropTimer);
+  drawStream(false);
+  if (S.node){
+    var nd = S.node;
+    nd.style.transform = "";
+    setTimeout(function(){ if (!S.held || S.node !== nd) nd.classList.remove("tipped"); }, MOVE_MS * 0.45);
+  }
+  S.phase = "returning";
+  S.timer = setTimeout(function(){ if (!S.held) S.phase = "idle"; }, MOVE_MS);
+  pourBtn.setAttribute("aria-pressed","false");
+  pourBtn.textContent = "Hold to pour";
+  lockControls(false);
+  updatePourAvailability();
+  render();
+  summarize(src, dst);
+}
+
+function summarize(src, dst){
+  var parts = [];
+  if (spilledThisPour){
+    parts.push("Water spilled over the top of the " + dst.name + ".");
+    $("wipe").hidden = false;
+  }
+  if (src.kind === "cyl" && src.vol <= 0) parts.push("The " + src.name + " is now empty.");
+  if (!parts.length) parts.push("Poured into the " + dst.name + ".");
+  setStatus(parts.join(" "));
+}
+
+pourBtn.addEventListener("pointerdown", function(e){
+  if (e.button !== undefined && e.button !== 0) return;
+  e.preventDefault();
+  try { pourBtn.setPointerCapture(e.pointerId); } catch(_){}
+  pourBtn.focus();
+  startPour();
+});
+["pointerup","pointercancel","lostpointercapture"].forEach(function(ev){
+  pourBtn.addEventListener(ev, stopPour);
+});
+pourBtn.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+pourBtn.addEventListener("keydown", function(e){
+  if (e.key === " " || e.key === "Enter"){
+    e.preventDefault();
+    if (!e.repeat) startPour();
+  }
+});
+pourBtn.addEventListener("keyup", function(e){
+  if (e.key === " " || e.key === "Enter"){ e.preventDefault(); stopPour(); }
+});
+pourBtn.addEventListener("blur", stopPour);
+window.addEventListener("blur", stopPour);
+
+$("wipe").addEventListener("click", function(){
+  spill = 0; spillAt = null;
+  $("wipe").hidden = true;
+  render();
+  setStatus("Spill wiped up. The bench is dry.");
+  pourBtn.focus();
+});
+
+$("reset").addEventListener("click", function(){
+  stopPour();
+  C.c100.vol = 0; C.c10.vol = 0; C.waste.vol = 0;
+  spill = 0; spillAt = null; $("wipe").hidden = true;
+  render();
+  setStatus("Bench reset. Both cylinders are empty.");
+});
+
+/* ---------- Start ---------- */
+updatePourAvailability();
+render();
+})();
+</script>
+</body>
+</html>
