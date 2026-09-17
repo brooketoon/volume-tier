@@ -64,6 +64,18 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--focus);outline-
 .tier .t-num{font-size:2rem;font-weight:700;line-height:1}
 .tier .t-name{font-size:1.15rem;font-weight:700}
 .tier .t-desc{color:var(--muted);font-size:.95rem}
+.tier-card{display:flex;flex-direction:column;gap:.5rem}
+.tier-card .tier{flex:1}
+.copyrow{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.copyrow code{font-size:.78rem;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:.2rem .4rem;word-break:break-all;flex:1 1 100%}
+.teacher-field{display:flex;flex-direction:column;gap:.3rem;font-weight:700;font-size:.95rem;margin:0 0 1.2rem;max-width:360px}
+.teacher-field input,.gate input{font:inherit;font-weight:400;padding:.45rem .6rem;border:2px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.gate{max-width:460px;margin:3rem auto;padding:0 1.25rem}
+.gate .card{padding:1.3rem}
+.gate label{display:block;font-weight:700;margin:.8rem 0 .3rem}
+.gate input{width:100%;font-size:1.15rem}
+.gate .err{color:var(--bad);font-size:.92rem;min-height:1.3em;margin:.3rem 0}
+.choices label.ruled-out{opacity:.5;text-decoration:line-through;cursor:not-allowed}
 .tier-gauge{display:flex;gap:4px;align-items:flex-end;height:26px;margin-bottom:.35rem}
 .tier-gauge i{display:block;width:10px;border-radius:2px;background:var(--line)}
 .tier-gauge i.on{background:var(--water)}
@@ -149,9 +161,37 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
 <!-- ============ Landing ============ -->
 <main class="landing" id="landing">
   <h1>Measuring volume</h1>
-  <p>Pick a starting point. Each one uses the same lab bench. You can change direction any time along the way.</p>
-  <div class="tiers" id="tierButtons"></div>
+  <div id="studentLanding">
+    <p>Open the mission link your teacher gave you to get started.</p>
+  </div>
+  <div id="teacherLanding" hidden>
+    <p>Teacher view. Preview any mission, or copy its link to assign it. Students who open a link go straight into that mission and never see this page.</p>
+    <label class="teacher-field">Class or section label (optional)
+      <input id="classTag" autocomplete="off" placeholder="e.g., Period 3">
+    </label>
+    <div class="tiers" id="tierButtons"></div>
+  </div>
 </main>
+
+<!-- ============ Name gate ============ -->
+<div class="gate" id="gate" hidden>
+  <section class="card" aria-labelledby="gateH">
+    <h2 id="gateH" style="margin:0 0 .3rem">Before you start</h2>
+    <p id="gateMsg" class="muted">Type your name or student ID so your work is saved with it.</p>
+    <div id="gateResume" hidden>
+      <div class="row" style="margin:.7rem 0">
+        <button class="btn btn-primary" id="resumeBtn" type="button">Continue</button>
+        <button class="btn" id="newStudentBtn" type="button">I'm someone else</button>
+      </div>
+    </div>
+    <div id="gateNew">
+      <label for="studentName">Name or student ID</label>
+      <input id="studentName" autocomplete="off" maxlength="60">
+      <p class="err" id="gateErr" aria-live="polite"></p>
+      <button class="btn btn-primary" id="gateStart" type="button">Start</button>
+    </div>
+  </section>
+</div>
 
 <!-- ============ Activity ============ -->
 <div id="appWrap" hidden>
@@ -163,7 +203,7 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
     <div class="row">
       <button class="btn" id="resetBench" type="button">Reset bench</button>
       <button class="btn" id="openSummary" type="button">Summary</button>
-      <button class="btn" id="toLanding" type="button">All missions</button>
+      <button class="btn" id="toLanding" type="button" hidden>Teacher view</button>
     </div>
   </header>
 
@@ -197,11 +237,6 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
         <div class="loupe"><svg id="loupe" viewBox="0 0 72 72" role="img" aria-label="Close-up of the water level"></svg></div>
       </section>
 
-      <section class="card" id="questCard" aria-labelledby="sqH">
-        <h2 id="sqH">Side quests</h2>
-        <p class="muted">Quick challenges that sharpen one skill from a different angle. Take one whenever you like. Your mission stays right where you left it.</p>
-        <button class="btn" id="anytimeQuest" type="button">Take a side quest</button>
-      </section>
     </aside>
   </main>
 </div>
@@ -479,8 +514,8 @@ var ITEMS = {
     { id:"t2-estimate10", type:"estimate", title:"Estimate the last digit", cyl:"c10", skill:"estimate", aid:"guide",
       prompt:"Picture the space between those two marks split into ten equal parts. How far past the lower mark is the guide line?",
       ok:"Good estimate. That estimated part becomes the last digit of your reading." },
-    { id:"t2-read10", type:"number", title:"Put it together", cyl:"c10", skill:"reading", aid:"guide",
-      prompt:"Read the 10 mL cylinder. Use the marks you found and your estimate." }
+    { id:"t2-read10", type:"number", title:"Put it together", cyl:"c10", skill:"reading", aid:"guideRequest",
+      prompt:"Read the 10 mL cylinder on your own this time: find the marks, then estimate. The guide line is there if you want it." }
   ],
   3: [
     { id:"t3-read100", type:"number", title:"Read the 100 mL cylinder", cyl:"c100", skill:"reading", aid:"none",
@@ -561,40 +596,129 @@ var S = {
   misses: {}, streak: 0, jumpOffered: {},
   itemStart: Date.now(), answered: false,
   loupeCyl: "c100",
-  t0: Date.now(), log: [], moves: [], firstTry: 0, questsOffered: 0, questsTaken: 0, questsChosen: 0, completed: {}
+  t0: Date.now(), log: [], moves: [], firstTry: 0, questsOffered: 0, questsTaken: 0, questsChosen: 0, completed: {},
+  everMissed: {}, guideShown: false, guideRequests: 0,
+  sid: null, student: "", cls: "", preview: false
 };
+var params = new URLSearchParams(location.search);
+var teacherMode = params.has("teacher");
+var STORE_KEY = "volumeLadder:v1";
 function curItem(){ return S.quest ? S.quest.items[S.quest.idx] : ITEMS[S.tier][S.idx]; }
 function modeTier(){ return S.quest ? S.quest.tier : S.tier; }
 function missKey(){ return S.quest ? "q-" + S.quest.tier + "-" + S.quest.idx + "-" + S.quest.n : "m-" + S.tier + "-" + S.idx; }
 function stamp(){ var s = Math.round((Date.now() - S.t0) / 1000); return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
 function where(){ return S.quest ? "Side quest (Tier " + S.quest.tier + ")" : MISSIONS[S.tier].name + " (Tier " + S.tier + ")"; }
-function addMove(text){ S.moves.push({ time: stamp(), text: text }); }
+function elapsed(){ return Math.round((Date.now() - S.t0) / 1000); }
+function addMove(text, type, extra){
+  var m = { time: stamp(), iso: new Date().toISOString(), elapsed: elapsed(), text: text, type: type || "move", tier: S.tier };
+  if (extra) for (var k in extra) m[k] = extra[k];
+  S.moves.push(m);
+  save();
+}
 
-/* ---------- Landing ---------- */
+/* ---------- Saving on this device ---------- */
+function loadStore(){
+  try { var raw = localStorage.getItem(STORE_KEY); var o = raw ? JSON.parse(raw) : null; if (o && o.sessions) return o; } catch(e){}
+  return { sessions: [], current: null };
+}
+function writeStore(o){ try { localStorage.setItem(STORE_KEY, JSON.stringify(o)); } catch(e){} }
+function save(){
+  if (S.preview || !S.sid) return;
+  var o = loadStore();
+  var rec = { sid:S.sid, student:S.student, cls:S.cls, startTier:S.startTier, tier:S.tier, idx:S.idx, t0:S.t0,
+              log:S.log, moves:S.moves, firstTry:S.firstTry, questsOffered:S.questsOffered, questsTaken:S.questsTaken,
+              questsChosen:S.questsChosen, guideRequests:S.guideRequests, completed:S.completed, updated:Date.now() };
+  var i = o.sessions.findIndex(function(x){ return x.sid === S.sid; });
+  if (i >= 0) o.sessions[i] = rec; else o.sessions.push(rec);
+  o.current = S.sid;
+  writeStore(o);
+}
+
+/* ---------- Landing (teacher view) ---------- */
+function linkFor(t){
+  var u = location.origin + location.pathname + "?tier=" + t;
+  var tag = $("classTag").value.trim();
+  if (tag) u += "&class=" + encodeURIComponent(tag);
+  return u;
+}
 [1,2,3].forEach(function(t){
   var g = h("span", { cls:"tier-gauge", "aria-hidden":"true" });
   [1,2,3].forEach(function(k){ var i = h("i", { cls: k <= t ? "on" : "" }); i.style.height = (8 + k*6) + "px"; g.appendChild(i); });
-  var b = h("button", { cls:"tier", type:"button", onclick:function(){ startTier(t, true); } }, [
+  var b = h("button", { cls:"tier", type:"button", onclick:function(){ startPreview(t); } }, [
     g,
     h("span", { cls:"t-num", text:"Tier " + t }),
     h("span", { cls:"t-name", text:MISSIONS[t].name }),
-    h("span", { cls:"t-desc", text:MISSIONS[t].desc })
+    h("span", { cls:"t-desc", text:MISSIONS[t].desc }),
+    h("span", { cls:"t-desc", text:"Preview this mission" })
   ]);
-  $("tierButtons").appendChild(b);
+  var code = h("code", { text: linkFor(t) });
+  var copy = h("button", { cls:"btn", type:"button", text:"Copy student link", onclick:function(){
+    var u = linkFor(t);
+    var done = function(){ copy.textContent = "Copied"; setTimeout(function(){ copy.textContent = "Copy student link"; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(u).then(done, function(){ window.prompt("Copy this link:", u); });
+    else window.prompt("Copy this link:", u);
+  } });
+  $("tierButtons").appendChild(h("div", { cls:"tier-card" }, [ b, h("div", { cls:"copyrow" }, [ code, copy ]) ]));
+  $("classTag").addEventListener("input", function(){ code.textContent = linkFor(t); });
 });
 
-function startTier(t, fromLanding){
-  if (S.startTier === null) { S.startTier = t; S.t0 = Date.now(); addMove("Started at Tier " + t + " (" + MISSIONS[t].name + ")"); }
-  else if (fromLanding && t !== S.tier) addMove("Chose Tier " + t + " (" + MISSIONS[t].name + ") from the mission list");
+function startPreview(t){
+  S = Object.assign(S, { preview:true, student:"(teacher preview)", sid:null, startTier:null, log:[], moves:[], firstTry:0,
+    questsOffered:0, questsTaken:0, questsChosen:0, guideRequests:0, completed:{}, misses:{}, everMissed:{}, jumpOffered:{} });
+  startTier(t, "preview");
+}
+function newSession(t, name){
+  S.sid = "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  S.student = name; S.cls = params.get("class") || ""; S.preview = false;
+  startTier(t, "link");
+}
+function resumeSession(rec){
+  ["sid","student","cls","startTier","t0","log","moves","firstTry","questsOffered","questsTaken","questsChosen","guideRequests","completed"].forEach(function(k){
+    if (rec[k] !== undefined) S[k] = rec[k];
+  });
+  S.tier = rec.tier; S.idx = Math.min(rec.idx || 0, ITEMS[rec.tier].length - 1);
+  $("gate").hidden = true; $("landing").hidden = true; $("appWrap").hidden = false;
+  addMove("Resumed on this device at Tier " + S.tier + ", challenge " + (S.idx + 1), "resume");
+  renderItem();
+}
+function showGate(t){
+  $("landing").hidden = true; $("gate").hidden = false;
+  var o = loadStore(), cls = params.get("class") || "";
+  var rec = o.sessions.find(function(x){ return x.sid === o.current; });
+  var canResume = rec && rec.startTier === t && (rec.cls || "") === cls;
+  $("gateResume").hidden = !canResume;
+  $("gateNew").hidden = !!canResume;
+  if (canResume){
+    $("gateMsg").textContent = "Welcome back, " + rec.student + ". Pick up where you left off?";
+    $("resumeBtn").onclick = function(){ resumeSession(rec); };
+    $("newStudentBtn").onclick = function(){
+      $("gateResume").hidden = true; $("gateNew").hidden = false;
+      $("gateMsg").textContent = "Type your name or student ID so your work is saved with it.";
+      $("studentName").focus();
+    };
+    $("resumeBtn").focus();
+  } else $("studentName").focus();
+  var go = function(){
+    var nm = $("studentName").value.trim();
+    if (!nm){ $("gateErr").textContent = "Type your name or ID to start."; $("studentName").focus(); return; }
+    $("gate").hidden = true;
+    newSession(t, nm);
+  };
+  $("gateStart").onclick = go;
+  $("studentName").onkeydown = function(e){ if (e.key === "Enter"){ e.preventDefault(); go(); } };
+}
+
+function startTier(t, how){
   S.tier = t; S.idx = 0; S.quest = null; S.streak = 0;
-  $("landing").hidden = true; $("appWrap").hidden = false;
-  try { history.replaceState(null, "", "?tier=" + t); } catch(e){}
+  S.startTier = t; S.t0 = Date.now();
+  addMove("Started at Tier " + t + " (" + MISSIONS[t].name + ")" + (how === "preview" ? " as a teacher preview" : ""), "start");
+  $("landing").hidden = true; $("gate").hidden = true; $("appWrap").hidden = false;
+  $("toLanding").hidden = !teacherMode;
   renderItem();
   if (ready) setTimeout(function(){ frame.style.height = (D.documentElement.scrollHeight + 4) + "px"; }, 30);
 }
 $("toLanding").addEventListener("click", function(){
   $("appWrap").hidden = true; $("landing").hidden = false;
-  try { history.replaceState(null, "", location.pathname); } catch(e){}
 });
 $("resetBench").addEventListener("click", function(){
   if (ready) D.getElementById("reset").click();
@@ -604,7 +728,7 @@ $("resetBench").addEventListener("click", function(){
 /* ---------- Rendering an item ---------- */
 function renderItem(){
   var it = curItem();
-  S.itemStart = Date.now(); S.answered = false; S.solved = false;
+  S.itemStart = Date.now(); S.answered = false; S.solved = false; S.guideShown = false;
   $("missionName").textContent = MISSIONS[S.tier].name;
   $("missionSub").textContent = MISSIONS[S.tier].desc;
 
@@ -614,7 +738,6 @@ function renderItem(){
     qb.hidden = false; qb.innerHTML = "";
     qb.appendChild(h("strong", { text:"Side quest: " + QUEST_NAMES[S.quest.from] }));
     qb.appendChild(h("span", { text:"Challenge " + (S.quest.idx + 1) + " of " + S.quest.items.length + ". When you finish, you'll pick up your mission right where you left it." }));
-    qb.appendChild(h("div", { cls:"row" }, [ h("button", { cls:"btn", type:"button", text:"Back to mission now", onclick:function(){ endQuest(false); } }) ]));
   } else qb.hidden = true;
 
   // progress
@@ -635,7 +758,6 @@ function renderItem(){
   $("feedback").textContent = ""; $("feedback").className = "feedback";
   $("offer").innerHTML = "";
 
-  $("questCard").hidden = (S.tier === 1 && !S.quest) || !!S.quest;
   setLoupe(it.cyl);
 }
 
@@ -667,6 +789,16 @@ function radioGroup(name, choices, legend){
 }
 function buildAnswer(it, area){
   var c = G[it.cyl];
+  if (it.aid === "guideRequest"){
+    var gb = h("button", { cls:"btn", type:"button", text:"Show the guide line", style:"margin:.3rem 0 .2rem" });
+    gb.addEventListener("click", function(){
+      if (S.guideShown) return;
+      S.guideShown = true; S.guideRequests++;
+      gb.textContent = "Guide line is on"; gb.disabled = true;
+      addMove("Turned on the guide line for \"" + it.title + "\"", "aid_requested", { challenge: it.id });
+    });
+    area.appendChild(gb);
+  }
   if (it.type === "choice") area.appendChild(radioGroup("ans", it.choices));
   else if (it.type === "abovebelow") area.appendChild(radioGroup("ans", ["Above the mark","Below the mark"]));
   else if (it.type === "estimate") area.appendChild(radioGroup("ans", [
@@ -757,7 +889,10 @@ function check(){
     answerText = raw.trim() + " mL";
     var pre = it.setup ? it.setup(V) : null;
     res = pre ? { ok:null, msg:pre } : gradeReading(c, raw, v);
-    if (res.ok === false && modeTier() === 2) res.msg += " The guide line shows exactly where to read.";
+    if (res.ok === false && modeTier() === 2){
+      if (it.aid === "guide" || S.guideShown) res.msg += " The guide line shows exactly where to read.";
+      else if (it.aid === "guideRequest") res.msg += " The guide line button can help you find the bottom of the curve.";
+    }
   }
   else if (it.type === "target"){
     answerText = "stored " + v.toFixed(3) + " mL";
@@ -767,7 +902,17 @@ function check(){
     else if (Math.abs(d) <= c.minor) res = { ok:false, err:"target", msg:"Close, but " + (d > 0 ? "a bit high" : "a bit low") + ". Switch to Slow or Drops as you get near the mark." };
     else res = { ok:false, err:"target", msg:(d > 0 ? "Too much" : "Too little") + ", by more than one small mark. Check which mark matches " + it.target.toFixed(c.dec) + " mL, then adjust." };
   }
+  if (res.ok === false){
+    if (it.type === "choice" || it.type === "abovebelow" || it.type === "estimate") ruleOut("ans");
+    if (it.type === "multi") it.parts.forEach(function(pt, i){ if (chosen("ans" + i) !== pt.answer) ruleOut("ans" + i); });
+  }
   show(res, answerText);
+}
+function ruleOut(name){
+  var r = document.querySelector('#answerArea input[name="'+name+'"]:checked');
+  if (!r) return;
+  r.checked = false; r.disabled = true;
+  r.closest("label").classList.add("ruled-out");
 }
 
 function show(res, answerText){
@@ -780,9 +925,14 @@ function show(res, answerText){
     return;
   }
   var key = missKey();
-  S.log.push({ time:stamp(), where:where(), item:it.title, answer:answerText || "", result: res.ok ? "Correct" : (res.title || "Try again"), ok:res.ok });
+  S.log.push({ time:stamp(), iso:new Date().toISOString(), elapsed:elapsed(), where:where(),
+    tier: modeTier(), context: S.quest ? "side quest" : "mission", questReason: S.quest ? S.quest.reason : "",
+    itemId: it.id, item:it.title, answer:answerText || "", result: res.ok ? "Correct" : (res.title || "Try again"), ok:res.ok,
+    err: res.ok ? "" : (res.err || it.skill || ""), attempt: (S.misses[key] || 0) + 1,
+    secs: Math.round((Date.now() - S.itemStart) / 1000), guide: it.aid === "guideRequest" ? (S.guideShown ? "requested" : "not requested") : "" });
+  save();
   if (res.ok){
-    var first = !S.misses[key];
+    var first = !S.misses[key] && !S.everMissed[key];
     if (first){ S.firstTry++; S.streak++; } else S.streak = 0;
     fb.className = "feedback good";
     S.solved = true;
@@ -792,12 +942,13 @@ function show(res, answerText){
     afterCorrect();
   } else {
     S.misses[key] = (S.misses[key] || 0) + 1;
+    S.everMissed[key] = true;
     S.streak = 0;
     fb.className = "feedback bad";
     fb.appendChild(h("strong", { text: res.title || "Not yet" }));
     var extra = (S.misses[key] >= 2 && modeTier() === 1 && it.hint2) ? " Tip: " + it.hint2 : "";
     fb.appendChild(h("span", { text:res.msg + extra }));
-    if (S.misses[key] === 2 && !S.quest && S.tier > 1) offerQuest(res.err || it.skill);
+    if (S.misses[key] === 2 && !S.quest && S.tier > 1) autoRoute(res.err || it.skill);
   }
 }
 
@@ -815,7 +966,7 @@ function afterCorrect(){
   }
   var list = ITEMS[S.tier];
   if (S.idx < list.length - 1){
-    off.appendChild(h("button", { cls:"btn btn-primary", type:"button", text:"Next challenge", onclick:function(){ S.idx++; renderItem(); } }));
+    off.appendChild(h("button", { cls:"btn btn-primary", type:"button", text:"Next challenge", onclick:function(){ S.idx++; save(); renderItem(); } }));
     if (S.tier < 3 && S.streak >= 3 && !S.jumpOffered[S.tier]){
       S.jumpOffered[S.tier] = true;
       var nt = S.tier + 1;
@@ -824,7 +975,7 @@ function afterCorrect(){
     }
   } else {
     S.completed[S.tier] = true;
-    addMove("Completed Tier " + S.tier + " (" + MISSIONS[S.tier].name + ")");
+    addMove("Completed Tier " + S.tier + " (" + MISSIONS[S.tier].name + ")", "mission_complete");
     if (S.tier < 3){
       var nx = S.tier + 1;
       off.appendChild(h("p", { text:"Mission complete. Next up: " + MISSIONS[nx].name + "." }));
@@ -839,26 +990,22 @@ function afterCorrect(){
   }
 }
 function moveUp(t, why){
-  addMove("Moved up: Tier " + S.tier + " to Tier " + t + " (" + why + ")");
+  addMove("Moved up: Tier " + S.tier + " to Tier " + t + " (" + why + ")", "move_up", { toTier: t, reason: why });
   S.tier = t; S.idx = 0; S.streak = 0; S.quest = null;
-  try { history.replaceState(null, "", "?tier=" + t); } catch(e){}
+  save();
   renderItem();
 }
 
-function offerQuest(err){
+function autoRoute(err){
   S.questsOffered++;
+  $("checkBtn").hidden = true;
+  document.querySelectorAll("#answerArea input, #answerArea button").forEach(function(x){ x.disabled = true; });
   var off = $("offer"); off.innerHTML = "";
-  off.appendChild(h("p", { text:"This one's tricky. There's a quick side quest built around this exact skill. It looks at the same bench from a different angle." }));
-  off.appendChild(h("div", { cls:"row" }, [
-    h("button", { cls:"btn btn-primary", type:"button", text:"Start side quest", onclick:function(){ startQuest(err, "offered after 2 tries"); } }),
-    h("button", { cls:"btn", type:"button", text:"Keep trying", onclick:function(){ off.innerHTML = ""; } })
-  ]));
+  off.appendChild(h("p", { text:"Let's come at this from a different angle with a quick side quest. You'll return to this challenge right after." }));
+  var go = h("button", { cls:"btn btn-primary", type:"button", text:"Continue", onclick:function(){ startQuest(err, "automatic after 2 tries"); } });
+  off.appendChild(go);
+  go.focus();
 }
-$("anytimeQuest").addEventListener("click", function(){
-  if (S.tier === 1 || S.quest) return;
-  S.questsChosen++;
-  startQuest(curItem().skill, "student's choice");
-});
 var questCounter = 0;
 function startQuest(err, reason){
   var from = S.tier, qt = from - 1;
@@ -867,12 +1014,12 @@ function startQuest(err, reason){
   S.questsTaken++;
   S.quest = { from:from, tier:qt, items: route.map(function(k){ return questItem(k, cylId); }), idx:0, n: ++questCounter,
               returnIdx:S.idx, reason:reason };
-  addMove("Side quest to Tier " + qt + " from \"" + ITEMS[from][S.idx].title + "\" (" + reason + ")");
+  addMove("Side quest to Tier " + qt + " from \"" + ITEMS[from][S.idx].title + "\" (" + reason + ")", "side_quest_start", { toTier: qt, reason: reason, challenge: ITEMS[from][S.idx].id });
   renderItem();
 }
 function endQuest(done){
   var q = S.quest;
-  addMove("Returned to Tier " + q.from + (done ? " after finishing the side quest" : " before finishing the side quest"));
+  addMove("Returned to Tier " + q.from + (done ? " after finishing the side quest" : " before finishing the side quest"), "side_quest_end", { toTier: q.from, reason: done ? "completed" : "left early" });
   S.quest = null;
   S.idx = q.returnIdx;
   S.misses["m-" + S.tier + "-" + S.idx] = 0;
@@ -894,8 +1041,19 @@ function openSummary(){
     stat(String(S.firstTry), "Correct on the first try"),
     stat(correct + " / " + answered, "Correct checks / all checks"),
     stat(String(S.questsTaken), "Side quests started"),
-    stat(S.questsOffered + " offered, " + S.questsChosen + " self-chosen", "How side quests began")
+    stat(String(S.guideRequests), "Guide line turned on when optional")
   ]));
+  b.appendChild(h("p", { cls:"muted", text:"Student: " + (S.student || "not set") + (S.cls ? ". Class: " + S.cls : "") + "." }));
+  var dl = h("div", { cls:"row", style:"margin:.6rem 0" });
+  dl.appendChild(h("button", { cls:"btn btn-primary", type:"button", text: S.preview ? "Download this preview (CSV)" : "Download my data (CSV)", onclick:function(){ downloadCSV(S.preview ? [snapshot()] : loadStore().sessions.filter(function(x){ return x.sid === S.sid; })); } }));
+  if (teacherMode){
+    var n = loadStore().sessions.length;
+    dl.appendChild(h("button", { cls:"btn", type:"button", text:"Download all sessions on this device (" + n + ")", onclick:function(){ downloadCSV(loadStore().sessions); } }));
+    dl.appendChild(h("button", { cls:"btn", type:"button", text:"Clear saved data on this device", onclick:function(){
+      if (confirm("Delete all saved student sessions on this device? Download them first if you need them.")){ writeStore({ sessions:[], current:null }); openSummary(); }
+    } }));
+  }
+  b.appendChild(dl);
   b.appendChild(h("h3", { text:"Tier moves" }));
   if (!S.moves.length) b.appendChild(h("p", { cls:"muted", text:"No moves yet." }));
   else {
@@ -919,6 +1077,34 @@ function openSummary(){
   }
   $("summary").showModal();
 }
+function snapshot(){
+  return { sid:S.sid || "preview", student:S.student, cls:S.cls, startTier:S.startTier, log:S.log, moves:S.moves };
+}
+function csvCell(v){
+  v = v == null ? "" : String(v);
+  if (/^[=+\-@]/.test(v)) v = "'" + v;
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function downloadCSV(sessions){
+  var cols = ["session_id","student","class","start_tier","timestamp","elapsed_sec","event","tier","context","side_quest_reason",
+              "challenge_id","challenge","answer","result","correct","error_type","attempt","seconds_on_challenge","guide_line","detail"];
+  var rows = [];
+  sessions.forEach(function(se){
+    var ev = [];
+    (se.log || []).forEach(function(l){ ev.push({ at:l.iso, r:[l.iso, l.elapsed, "answer", l.tier, l.context, l.questReason, l.itemId, l.item, l.answer, l.result, l.ok ? 1 : 0, l.err, l.attempt, l.secs, l.guide, ""] }); });
+    (se.moves || []).forEach(function(m){ ev.push({ at:m.iso, r:[m.iso, m.elapsed, m.type, m.toTier || m.tier, "", m.reason || "", m.challenge || "", "", "", "", "", "", "", "", "", m.text] }); });
+    ev.sort(function(a, b){ return a.at < b.at ? -1 : (a.at > b.at ? 1 : 0); });
+    ev.forEach(function(e){ rows.push([se.sid, se.student, se.cls, se.startTier].concat(e.r)); });
+  });
+  var csv = cols.join(",") + "\n" + rows.map(function(r){ return r.map(csvCell).join(","); }).join("\n") + "\n";
+  var blob = new Blob([csv], { type:"text/csv" });
+  var a = document.createElement("a");
+  var who = sessions.length === 1 ? (sessions[0].student || "session").replace(/[^a-z0-9]+/gi, "-") : "all-sessions";
+  a.href = URL.createObjectURL(blob);
+  a.download = "volume-ladder-" + who + "-" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+}
 function stat(big, small){ return h("div", { cls:"stat" }, [ h("b", { text:big }), h("span", { text:small }) ]); }
 $("openSummary").addEventListener("click", openSummary);
 $("closeSummary").addEventListener("click", function(){ $("summary").close(); });
@@ -929,7 +1115,7 @@ function aidShapes(forLoupe){
   if (!it) return shapes;
   var c = G[it.cyl], v = V[it.cyl];
   var aid = it.aid;
-  if (aid === "guide" && m >= 2 && m < 3 && v > 0.0004){
+  if ((aid === "guide" || (aid === "guideRequest" && S.guideShown)) && m >= 2 && m < 3 && v > 0.0004){
     shapes.push({ k:"line", cls:"aid-guide", x1:c.L - 7, x2:c.R + 7, y:levelY(c, v), cyl:it.cyl });
   }
   if (aid === "levels"){
@@ -1039,8 +1225,14 @@ function loop(){
 }
 
 /* ---------- Deep link: ?tier=1|2|3 launches directly ---------- */
-var qp = new URLSearchParams(location.search).get("tier");
-if (qp === "1" || qp === "2" || qp === "3") startTier(+qp, true);
+var qp = params.get("tier");
+if (teacherMode){
+  $("studentLanding").hidden = true; $("teacherLanding").hidden = false;
+  if (params.get("class")) $("classTag").value = params.get("class");
+  $("classTag").dispatchEvent(new Event("input"));
+} else if (qp === "1" || qp === "2" || qp === "3"){
+  showGate(+qp);
+}
 })();
 </script>
 </body>
