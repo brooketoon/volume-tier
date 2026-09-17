@@ -161,16 +161,8 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
 <!-- ============ Landing ============ -->
 <main class="landing" id="landing">
   <h1>Measuring volume</h1>
-  <div id="studentLanding">
-    <p>Open the mission link your teacher gave you to get started.</p>
-  </div>
-  <div id="teacherLanding" hidden>
-    <p>Teacher view. Preview any mission, or copy its link to assign it. Students who open a link go straight into that mission and never see this page.</p>
-    <label class="teacher-field">Class or section label (optional)
-      <input id="classTag" autocomplete="off" placeholder="e.g., Period 3">
-    </label>
-    <div class="tiers" id="tierButtons"></div>
-  </div>
+  <p>Pick a mission to start. Each one uses the same lab bench.</p>
+  <div class="tiers" id="tierButtons"></div>
 </main>
 
 <!-- ============ Name gate ============ -->
@@ -181,6 +173,7 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
     <div id="gateResume" hidden>
       <div class="row" style="margin:.7rem 0">
         <button class="btn btn-primary" id="resumeBtn" type="button">Continue</button>
+        <button class="btn" id="switchBtn" type="button">Start this mission instead</button>
         <button class="btn" id="newStudentBtn" type="button">I'm someone else</button>
       </div>
     </div>
@@ -203,7 +196,7 @@ dialog h3{font-size:1rem;margin:1rem 0 .35rem}
     <div class="row">
       <button class="btn" id="resetBench" type="button">Reset bench</button>
       <button class="btn" id="openSummary" type="button">Summary</button>
-      <button class="btn" id="toLanding" type="button" hidden>Teacher view</button>
+      <button class="btn" id="toLanding" type="button">All missions</button>
     </div>
   </header>
 
@@ -634,38 +627,29 @@ function save(){
   writeStore(o);
 }
 
-/* ---------- Landing (teacher view) ---------- */
-function linkFor(t){
-  var u = location.origin + location.pathname + "?tier=" + t;
-  var tag = $("classTag").value.trim();
-  if (tag) u += "&class=" + encodeURIComponent(tag);
-  return u;
-}
+/* ---------- Landing ---------- */
 [1,2,3].forEach(function(t){
   var g = h("span", { cls:"tier-gauge", "aria-hidden":"true" });
   [1,2,3].forEach(function(k){ var i = h("i", { cls: k <= t ? "on" : "" }); i.style.height = (8 + k*6) + "px"; g.appendChild(i); });
-  var b = h("button", { cls:"tier", type:"button", onclick:function(){ startPreview(t); } }, [
+  var b = h("button", { cls:"tier", type:"button", onclick:function(){ chooseTier(t); } }, [
     g,
     h("span", { cls:"t-num", text:"Tier " + t }),
     h("span", { cls:"t-name", text:MISSIONS[t].name }),
     h("span", { cls:"t-desc", text:MISSIONS[t].desc }),
-    h("span", { cls:"t-desc", text:"Preview this mission" })
   ]);
-  var code = h("code", { text: linkFor(t) });
-  var copy = h("button", { cls:"btn", type:"button", text:"Copy student link", onclick:function(){
-    var u = linkFor(t);
-    var done = function(){ copy.textContent = "Copied"; setTimeout(function(){ copy.textContent = "Copy student link"; }, 1500); };
-    if (navigator.clipboard) navigator.clipboard.writeText(u).then(done, function(){ window.prompt("Copy this link:", u); });
-    else window.prompt("Copy this link:", u);
-  } });
-  $("tierButtons").appendChild(h("div", { cls:"tier-card" }, [ b, h("div", { cls:"copyrow" }, [ code, copy ]) ]));
-  $("classTag").addEventListener("input", function(){ code.textContent = linkFor(t); });
+  $("tierButtons").appendChild(b);
 });
 
-function startPreview(t){
-  S = Object.assign(S, { preview:true, student:"(teacher preview)", sid:null, startTier:null, log:[], moves:[], firstTry:0,
-    questsOffered:0, questsTaken:0, questsChosen:0, guideRequests:0, completed:{}, misses:{}, everMissed:{}, jumpOffered:{} });
-  startTier(t, "preview");
+function chooseTier(t){
+  if (S.sid){ switchTier(t); return; }
+  showGate(t);
+}
+function switchTier(t){
+  addMove("Chose Tier " + t + " (" + MISSIONS[t].name + ") from the mission list", "chose_tier", { toTier: t });
+  S.tier = t; S.idx = 0; S.quest = null; S.streak = 0;
+  save();
+  $("landing").hidden = true; $("gate").hidden = true; $("appWrap").hidden = false;
+  renderItem();
 }
 function newSession(t, name){
   S.sid = "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -683,14 +667,18 @@ function resumeSession(rec){
 }
 function showGate(t){
   $("landing").hidden = true; $("gate").hidden = false;
-  var o = loadStore(), cls = params.get("class") || "";
+  var o = loadStore();
   var rec = o.sessions.find(function(x){ return x.sid === o.current; });
-  var canResume = rec && rec.startTier === t && (rec.cls || "") === cls;
+  var canResume = !!rec;
   $("gateResume").hidden = !canResume;
   $("gateNew").hidden = !!canResume;
   if (canResume){
-    $("gateMsg").textContent = "Welcome back, " + rec.student + ". Pick up where you left off?";
+    $("gateMsg").textContent = "Welcome back, " + rec.student + ". You were on " + MISSIONS[rec.tier].name + ", challenge " + ((rec.idx || 0) + 1) + ".";
+    $("resumeBtn").textContent = "Continue " + MISSIONS[rec.tier].name;
     $("resumeBtn").onclick = function(){ resumeSession(rec); };
+    $("switchBtn").hidden = rec.tier === t;
+    $("switchBtn").textContent = "Start " + MISSIONS[t].name + " instead";
+    $("switchBtn").onclick = function(){ resumeSession(rec); switchTier(t); };
     $("newStudentBtn").onclick = function(){
       $("gateResume").hidden = true; $("gateNew").hidden = false;
       $("gateMsg").textContent = "Type your name or student ID so your work is saved with it.";
@@ -713,7 +701,6 @@ function startTier(t, how){
   S.startTier = t; S.t0 = Date.now();
   addMove("Started at Tier " + t + " (" + MISSIONS[t].name + ")" + (how === "preview" ? " as a teacher preview" : ""), "start");
   $("landing").hidden = true; $("gate").hidden = true; $("appWrap").hidden = false;
-  $("toLanding").hidden = !teacherMode;
   renderItem();
   if (ready) setTimeout(function(){ frame.style.height = (D.documentElement.scrollHeight + 4) + "px"; }, 30);
 }
@@ -1226,11 +1213,7 @@ function loop(){
 
 /* ---------- Deep link: ?tier=1|2|3 launches directly ---------- */
 var qp = params.get("tier");
-if (teacherMode){
-  $("studentLanding").hidden = true; $("teacherLanding").hidden = false;
-  if (params.get("class")) $("classTag").value = params.get("class");
-  $("classTag").dispatchEvent(new Event("input"));
-} else if (qp === "1" || qp === "2" || qp === "3"){
+if (qp === "1" || qp === "2" || qp === "3"){
   showGate(+qp);
 }
 })();
